@@ -79,6 +79,17 @@ body.prompt #comp { background: linear-gradient(var(--chapa), var(--chapa)) padd
 #espelho .fant { color: var(--nevoa); }
 #faixa { display: flex; align-items: center; gap: 6px; padding: 0 6px 6px; min-height: 40px; }
 #chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow: hidden; }
+/* os quatro leitores da célula: apagado, chamado, respondeu, concordou com o que foi aproveitado, falhou */
+#cel { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 0 5px 0 3px; }
+#cel i { width: 8px; height: 8px; border-radius: 50%; background: #33353e; box-shadow: inset 0 1px 1px rgba(0, 0, 0, .7); }
+#cel i.cham { background: var(--leg2); }
+#cel i.ok { background: #5d6172; }
+#cel i.sim { background: var(--luz-m); box-shadow: 0 0 7px 1px var(--luz-m); }
+#cel i.sim:first-child { background: var(--luz-a); box-shadow: 0 0 7px 1px var(--luz-a); }
+#cel i.sim:last-child { background: var(--luz-b); box-shadow: 0 0 7px 1px var(--luz-b); }
+#cel i.err { background: var(--alerta); }
+.chip.corr { box-shadow: 0 2px 0 #000, inset 0 0 0 1.5px var(--luz-m); }
+.cartao .tag { display: block; margin-top: 8px; font-size: 12px; color: var(--leg2); }
 .chip { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-radius: 8px; padding: 8px 14px; font-size: 15px;
   background: linear-gradient(var(--topo), var(--topo-b)); color: var(--leg); box-shadow: 0 2px 0 #000, inset 0 1px 0 rgba(255, 255, 255, .07); }
 .acao { flex: none; border: 1px solid var(--fresta); border-radius: 9px; padding: 8px 12px; background: #15161b; color: var(--tinta); font-size: 14px; }
@@ -163,9 +174,9 @@ body.prompt #comp { background: linear-gradient(var(--chapa), var(--chapa)) padd
 #porta p { margin: 0 0 14px; color: var(--leg-cmd); font-size: 15px; line-height: 1.45; font-weight: 400; }
 #codigo { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--fresta); background: var(--chapa); color: var(--tinta); font: 500 19px/1.2 var(--fonte); letter-spacing: .06em; outline: none; -webkit-user-select: text; user-select: text; }
 #codigo:focus { border-color: var(--luz-m); }
-#parear, #voltar { margin-top: 12px; width: 100%; padding: 12px; font-size: 16px; }
-#voltar[hidden] { display: none; }
-#portaErro { min-height: 20px; margin-top: 10px; color: var(--alerta); font-size: 14px; }
+#parear { margin-top: 14px; width: 100%; padding: 12px; font-size: 16px; }
+#parear[hidden] { display: none; }
+#portaErro { min-height: 22px; margin-top: 4px; color: var(--leg); font-size: 16px; }
 
 #aviso { position: fixed; z-index: 50; left: 50%; top: calc(var(--barra) + 8px); transform: translateX(-50%); max-width: 82vw; padding: 9px 15px; border-radius: 10px; border: 1px solid var(--alerta); background: #1d1012; color: #ffd9d9; font-size: 14px; font-weight: 400; opacity: 0; pointer-events: none; transition: opacity .2s; }
 #aviso.on { opacity: 1; }
@@ -194,6 +205,7 @@ body.prompt #comp { background: linear-gradient(var(--chapa), var(--chapa)) padd
         placeholder="Toque em “prompt” para escrever aqui com sugestões. Fora desse modo, as teclas vão direto para o notebook."></textarea>
     </div>
     <div id="faixa">
+      <span id="cel" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
       <div id="chips"></div>
       <button class="acao" id="bSug" type="button">sugerir prompts</button>
       <button class="acao" id="bMel" type="button">melhorar</button>
@@ -213,12 +225,10 @@ body.prompt #comp { background: linear-gradient(var(--chapa), var(--chapa)) padd
 
 <div id="porta" hidden>
   <div id="portaCaixa">
-    <h1>Parear com o notebook</h1>
+    <h1>Liberar este tablet</h1>
     <p id="portaTexto"></p>
-    <input id="codigo" type="text" inputmode="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
-    <button class="acao forte" id="parear" type="button">Parear</button>
-    <button class="acao" id="voltar" type="button" hidden>Voltar sem trocar</button>
     <div id="portaErro"></div>
+    <button class="acao forte" id="parear" type="button" hidden>Pedir de novo</button>
   </div>
 </div>
 
@@ -316,7 +326,7 @@ aplicarTema(lembrar('api', 'claude'));
 /* Ligação com o notebook: direta (JSON) ou pelo relay (AES-GCM)     */
 /* ---------------------------------------------------------------- */
 let INFO = { modo: 'direto' };
-let ws = null, pronto = false, noRelay = false, espera = 500;
+let ws = null, pronto = false, noRelay = false, espera = 500, recusas = 0;
 let credencial = '', chaves = null, meuC = '', sid = '', nOut = 0, nIn = 0, tOla = 0;
 let filaEnvio = Promise.resolve(), filaRec = Promise.resolve();
 let est = { inj: false, sim: false, ia: false, tela: false, msg: '' };
@@ -329,6 +339,7 @@ async function derivar(segredo) {
   const hex = Array.from(await h('teclado/sala/' + segredo), x => x.toString(16).padStart(2, '0')).join('');
   return {
     sala: hex.slice(0, 32),
+    cel: Array.from(await h('teclado/celula/' + segredo), x => x.toString(16).padStart(2, '0')).join(''),     // acesso direto à célula no relay
     t2n: await crypto.subtle.importKey('raw', await h('teclado/t2n/' + segredo), 'AES-GCM', false, ['encrypt']),
     n2t: await crypto.subtle.importKey('raw', await h('teclado/n2t/' + segredo), 'AES-GCM', false, ['decrypt'])
   };
@@ -398,18 +409,19 @@ async function iniciar() {
     if (t) { c = limpo(t); history.replaceState(null, '', location.pathname); }
   }
   if (c) guardar(relay ? 'segredo' : 'token', c); else c = lembrar(relay ? 'segredo' : 'token', '');
-  if (!c) return pedirCodigo('');
+  if (!c) return pedirAcesso();
   usar(c);
 }
 async function usar(c) {
   credencial = c;
   if (INFO.modo === 'relay') {
-    if (!window.crypto || !crypto.subtle) return pedirCodigo('Este endereço não é HTTPS: o navegador bloqueia a criptografia. Abra o relay por https://.');
+    if (!window.crypto || !crypto.subtle) { $('portaTexto').textContent = ERROS_PAR.https; $('portaErro').textContent = ''; $('porta').hidden = false; return; }
     chaves = await derivar(c);
+    chaveCel = chaves.cel;
   } else {
     try {
       const r = await fetch('/auth?t=' + encodeURIComponent(c), { cache: 'no-store' });
-      if (r.status === 403) return pedirCodigo('O notebook não reconheceu esse token.');
+      if (r.status === 403) { guardar('token', ''); credencial = ''; return pedirAcesso(); }       // credencial velha: pede acesso de novo
     } catch (e) { situacao(); return setTimeout(() => usar(c), 1500); }
   }
   $('porta').hidden = true;
@@ -417,32 +429,98 @@ async function usar(c) {
   pronto = false; noRelay = false;
   ligar();
 }
-function pedirCodigo(erro) {
-  const relay = INFO.modo === 'relay';
-  $('portaTexto').textContent = relay
-    ? 'Digite o segredo que o teclado.js mostra no terminal do notebook (linha “segredo”). Ele fica só neste tablet; o relay não o recebe.'
-    : 'Digite o token que o teclado.js mostra no terminal do notebook (linha “token”).';
-  $('portaErro').textContent = erro || '';
-  $('codigo').value = '';
-  $('voltar').hidden = !credencial;
-  $('porta').hidden = false;
+/* Pareamento sem digitar nada: este tablet pede acesso e o dono libera no notebook (ENTER no terminal do teclado,
+   ou "Permitir" na página local). Liberado, o notebook entrega a credencial, que fica guardada aqui; depois entra direto. */
+let pedindo = false, tPedir = 0, cancelarPedido = null;
+const unb64 = t => Uint8Array.from(atob(t), c => c.charCodeAt(0));
+async function hpar() {          // SHA-256 de itens com prefixo de tamanho; igual ao do notebook
+  const partes = []; let total = 0;
+  for (const it of arguments) { const b = typeof it === 'string' ? new TextEncoder().encode(it) : it; partes.push(new Uint8Array([b.length >> 8, b.length & 255]), b); total += 2 + b.length; }
+  const tudo = new Uint8Array(total); let o = 0;
+  for (const x of partes) { tudo.set(x, o); o += x.length; }
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', tudo));
 }
-$('parear').addEventListener('click', () => {
-  const c = limpo($('codigo').value);
-  if (!c) { $('portaErro').textContent = 'Digite o código.'; return; }
-  guardar(INFO.modo === 'relay' ? 'segredo' : 'token', c);
-  usar(c);
-});
-$('codigo').addEventListener('keydown', e => { if (e.key === 'Enter') $('parear').click(); });
-$('estado').addEventListener('click', () => { if (!pronto) pedirCodigo(''); });
-$('voltar').addEventListener('click', () => { $('porta').hidden = true; });
+function quemSou() {             // descrição curta para o dono reconhecer o pedido no notebook
+  const u = navigator.userAgent;
+  const so = /Android/.test(u) ? 'Android' : /iPad|iPhone/.test(u) ? 'iOS' : /Windows/.test(u) ? 'Windows' : /Mac OS/.test(u) ? 'Mac' : /Linux/.test(u) ? 'Linux' : 'aparelho';
+  const nav = /SamsungBrowser/.test(u) ? 'Samsung Internet' : /Edg\//.test(u) ? 'Edge' : /Firefox/.test(u) ? 'Firefox' : /Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : 'navegador';
+  const mod = /;\s*([A-Z]{2}-[A-Z0-9]+)[;)]/.exec(u);
+  return so + ', ' + nav + (mod ? ' (' + mod[1] + ')' : '') + ', tela ' + screen.width + 'x' + screen.height;
+}
+function acessoPeloRelay() {     // devolve a credencial, ou rejeita com o motivo
+  return new Promise((ok, falha) => {
+    const s = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?papel=parear');
+    let par, pkT, fim = false;
+    const acabar = (erro, valor) => { if (fim) return; fim = true; cancelarPedido = null; try { s.close(); } catch (e) { /* já fechado */ } if (erro) falha(erro); else ok(valor); };
+    cancelarPedido = () => acabar('cancelado');
+    s.onopen = async () => {
+      try {
+        par = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+        pkT = new Uint8Array(await crypto.subtle.exportKey('raw', par.publicKey));
+        s.send(JSON.stringify({ p: 1, pk: b64(pkT), quem: quemSou() }));
+      } catch (e) { acabar('cripto'); }
+    };
+    s.onmessage = async ev => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      try {
+        if (m.p === 0) return acabar(m.erro || 'erro');
+        if (m.p !== 6) return;                              // liberado: chave do notebook + credencial cifrada com a chave combinada
+        const pkN = unb64(m.pk), x = unb64(m.x);
+        const pub = await crypto.subtle.importKey('raw', pkN, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+        const K = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: pub }, par.privateKey, 256));
+        const chave = await crypto.subtle.importKey('raw', await hpar('teclado/par/chave', K, pkT, pkN), 'AES-GCM', false, ['decrypt']);
+        acabar(null, new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: x.subarray(0, 12) }, chave, x.subarray(12))));
+      } catch (e) { acabar('cripto'); }
+    };
+    s.onerror = () => acabar('sem-notebook');
+    s.onclose = () => acabar('sem-notebook');
+  });
+}
+const ERROS_PAR = {
+  negado: 'O pedido foi recusado no notebook.',
+  varios: 'Mais de um aparelho pediu ao mesmo tempo e o notebook recusou todos. Peça de novo.',
+  tempo: 'Ninguém liberou a tempo. Pedindo de novo.',
+  ocupado: 'O notebook está com muitos pedidos. Tentando de novo.',
+  'sem-notebook': 'O notebook não está ligado ao teclado. Rode nele o comando de instalação; este tablet tenta de novo sozinho.',
+  https: 'Este endereço não é HTTPS: o navegador bloqueia a criptografia do pareamento.',
+  erro: 'Não consegui pedir acesso. Tentando de novo.'
+};
+async function pedirAcesso() {
+  if (pedindo || pronto) return;
+  pedindo = true; clearTimeout(tPedir);
+  const relay = INFO.modo === 'relay', chave = relay ? 'segredo' : 'token';
+  $('portaTexto').textContent = 'No notebook, aperte ENTER no terminal do teclado (ou clique em “Permitir” na página que abriu lá). É só na primeira vez; nada precisa ser digitado aqui.';
+  $('portaErro').textContent = 'Pedido enviado. Aguardando o notebook.';
+  $('parear').hidden = true; $('porta').hidden = false;
+  let cred = '', erro = '';
+  try {
+    if (relay) {
+      if (!window.crypto || !crypto.subtle) throw 'https';
+      cred = limpo(await acessoPeloRelay());
+    } else {
+      const corte = new AbortController();
+      cancelarPedido = () => corte.abort();
+      const r = await fetch('/pedir?quem=' + encodeURIComponent(quemSou()), { cache: 'no-store', signal: corte.signal }), j = await r.json();
+      if (!r.ok) throw j.erro || 'erro';
+      cred = limpo(j.t);
+    }
+  } catch (e) { erro = typeof e === 'string' ? e : 'erro'; }
+  pedindo = false; cancelarPedido = null;
+  if (cred) { guardar(chave, cred); $('portaErro').textContent = 'Liberado.'; return usar(cred); }
+  if (pronto) return;
+  $('portaErro').textContent = ERROS_PAR[erro] || ERROS_PAR.erro;
+  if (erro === 'negado' || erro === 'varios' || erro === 'https') $('parear').hidden = false;     // recusado: só pede de novo se a pessoa quiser
+  else tPedir = setTimeout(pedirAcesso, erro === 'tempo' ? 600 : 4000);                           // notebook desligado etc.: tenta sozinho
+}
+$('parear').addEventListener('click', pedirAcesso);
+$('estado').addEventListener('click', () => { if (!pronto) pedirAcesso(); });
 
 function ligar() {
   const base = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?';
   const eu = new WebSocket(base + (INFO.modo === 'relay' ? 'sala=' + chaves.sala + '&papel=tablet' : 't=' + encodeURIComponent(credencial)));
   ws = eu; pronto = false; noRelay = false;
   eu.binaryType = 'arraybuffer';
-  eu.onopen = () => { espera = 500; if (INFO.modo !== 'relay') estabelecer(); situacao(); };
+  eu.onopen = () => { espera = 500; recusas = 0; if (INFO.modo !== 'relay') estabelecer(); situacao(); };
   eu.onmessage = ev => {
     if (ws !== eu) return;
     if (typeof ev.data === 'string') {
@@ -464,6 +542,7 @@ function ligar() {
     ws = null; pronto = false; noRelay = false;
     pendentes.clear();
     soltarTudo(false); situacao();
+    if (INFO.modo === 'relay') fetch('/info', { cache: 'no-store' }).then(r => { if (r.ok && !pronto && ++recusas >= 3) { recusas = 0; pedirAcesso(); } }).catch(() => {});
     setTimeout(ligar, espera); espera = Math.min(espera * 2, 4000);
   };
 }
@@ -476,13 +555,14 @@ function controle(m) {                                     // avisos do relay, e
     const alvo = ws, ola = { a: 'ola', c: meuC };
     filaEnvio = filaEnvio.then(() => selar(ola)).then(b => { if (alvo && alvo.readyState === 1) alvo.send(b); }).catch(() => {});
     const marca = tOla = Date.now();
-    setTimeout(() => { if (tOla === marca && !pronto && noRelay) pedirCodigo('O notebook está no relay, mas não respondeu a este segredo. Confira o código.'); }, 6000);
+    setTimeout(() => { if (tOla === marca && !pronto && noRelay) pedirAcesso(); }, 6000);            // credencial velha: pede acesso de novo
   }
   situacao();
 }
 function estabelecer() {
   pronto = true;
-  $('porta').hidden = true;
+  $('porta').hidden = true; clearTimeout(tPedir);
+  if (cancelarPedido) cancelarPedido();                    // já entrou pela credencial guardada: retira o pedido que estava no notebook
   assinada = ''; temBase = false; pendentes.clear();
   pedirTela();
   situacao();
@@ -514,18 +594,18 @@ function receber(m, bin) {
     }
     case 'q': if (bin) chegouQuadro(m, bin); break;         // quadro (inteiro ou só o retângulo que mudou) da tela
     case 'e': avisar(m.msg); break;
-    case 'corpus': modelo.uni.clear(); modelo.bi.clear(); modelo.forma.clear(); for (const t of m.itens || []) aprender(t); atualizarChips(); break;
+    case 'corpus': modelo.uni.clear(); modelo.bi.clear(); modelo.forma.clear(); for (const t of m.itens || []) aprender(t); exemplos = (m.itens || []).slice(-25); atualizarChips(); break;
     case 'aprendi': aprender(m.s); break;
     case 'tela': if (typeof m.t === 'string') $('janela').textContent = m.t; break;
-    case 'ai': chegouIA(m); break;
+    case 'cel': chegouCelula(m); break;
   }
 }
 
 function situacao() {
   let txt, cls = '';
-  if (!ws || ws.readyState !== 1) { txt = INFO.modo === 'relay' ? 'sem conexão com o relay, tentando de novo (toque aqui para trocar o segredo)' : 'sem conexão, tentando de novo'; cls = 'off'; }
+  if (!ws || ws.readyState !== 1) { txt = INFO.modo === 'relay' ? 'sem conexão com o relay, tentando de novo (toque aqui para pedir acesso de novo)' : 'sem conexão, tentando de novo'; cls = 'off'; }
   else if (!pronto) {
-    if (INFO.modo === 'relay') { txt = noRelay ? 'pareando com o notebook' : 'o notebook não está no relay (toque aqui para trocar o segredo)'; cls = noRelay ? '' : 'off'; }
+    if (INFO.modo === 'relay') { txt = noRelay ? 'pareando com o notebook' : 'o notebook não está no relay (toque aqui para pedir acesso de novo)'; cls = noRelay ? '' : 'off'; }
     else txt = 'conectando';
   }
   else if (est.sim) { txt = 'simulação: o notebook não digita de verdade'; cls = 'ok'; }
@@ -611,13 +691,141 @@ function compor(ch, el) {     // texto a emitir, ou null se o acento ficou esper
 function soltarMorta() { const m = morta; morta = null; mortaEl = null; return m || ''; }
 
 /* ---------------------------------------------------------------- */
+/* Camada 0: do dedo à tecla, determinística, neste tablet           */
+/* Aprende onde os seus dedos caem (só números por tecla, nenhum     */
+/* texto), mede o quanto cada toque ficou em dúvida entre vizinhas e  */
+/* entrega isso ao leitor "toque" da célula. As réguas padrão (R2 a   */
+/* R8) são internas: as origens ficam só nestes comentários e nada    */
+/* delas aparece na tela. Se o autoteste falhar, a célula não liga.   */
+/* ---------------------------------------------------------------- */
+const semAcento = t => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const mediana = v => { const o = v.slice().sort((a, b) => a - b); return o.length ? o[o.length >> 1] : 0; };
+
+/* R7, invariante (origem: ISL 2008 G7, homotetia; ISL 2010 N5 na leitura "área = quadrado da razão linear").
+   Toques e centros vivem em unidades de tecla: ampliar ou reduzir o teclado não muda nenhuma coordenada. */
+const emTeclas = (px, py, origem, uw, uh) => [(px - origem[0]) / uw, (py - origem[1]) / uh];
+/* R5, inspiração (origem: ISL 2020 G9, margem de separação). 1 = toque no centro da tecla; 0 = em cima da fronteira com a vizinha. */
+const separacao = (d1, d2) => (d1 + d2 > 0 ? (d2 - d1) / (d1 + d2) : 1);
+/* R6, inspiração (origem: ISL 2013 C7, o arranjo inteiro girado contra um item fora do lugar).
+   Deriva = deslocamento comum dos últimos toques (a mão saiu do lugar); um toque isolado longe da própria tecla é outra coisa. */
+const derivaDe = am => (am.length < 8 ? [0, 0] : [mediana(am.map(a => a[0])), mediana(am.map(a => a[1]))]);
+/* R4, invariante + inspiração (origem: ISL 2010 A7, recorrência max-mais). A sequência a_n = max(a_k + a_{n-k}) acaba
+   obedecendo a_n = a_l + a_{n-l}, com l o bloco de maior média: quem manda é a maior taxa sustentada. Aqui ela dá o
+   ritmo de digitação (maior número de teclas por segundo mantido num trecho) e, dele, a pausa que chama a célula. */
+function maxMais(inicio, ate) {
+  const a = [0].concat(inicio);
+  for (let n = inicio.length + 1; n <= ate; n++) { let m = -Infinity; for (let k = 1; k < n; k++) m = Math.max(m, a[k] + a[n - k]); a.push(m); }
+  return a;
+}
+function taxaSustentada(intervalos) {      // teclas por segundo no melhor trecho de 4 a 12 teclas seguidas
+  let melhor = 0;
+  for (let l = 4; l <= 12; l++) for (let i = 0; i + l <= intervalos.length; i++) { let soma = 0; for (let k = i; k < i + l; k++) soma += intervalos[k]; if (soma > 0) melhor = Math.max(melhor, 1000 * l / soma); }
+  return melhor;
+}
+/* R3, inspiração (origem: ISL 2024 C7, sequência que conta as próprias repetições). Cada correção confirmada conta quantas
+   vezes já apareceu; desvio que se repete vira regra fixa desta camada e passa a ser corrigido sem chamar a célula. */
+const contagens = v => { const c = new Map(), a = []; for (const x of v) { c.set(x, (c.get(x) || 0) + 1); a.push(c.get(x)); } return a; };
+const REPETE_PARA_VIRAR_REGRA = 3;
+/* R2, inspiração (origem: ISL 2012 C6, respostas que podem mentir mas não muitas vezes seguidas, com função potencial).
+   O peso de um leitor cai em potência a cada previsão errada seguida, volta a 1 quando acerta e zera depois de 5 erros seguidos. */
+const pesoDe = erros => (erros >= 5 ? 0 : Math.pow(0.6, erros));
+
+let geo = null, deriva = [0, 0], toqueAtual = null, cauda = [], ultimaAuto = null, exemplos = [];
+const estat = new Map(), filaToque = [], janelaDeriva = [], batidas = [];
+let ultimaBatida = 0, gravacoes = 0;
+try { for (const v of JSON.parse(lembrar('toque', '[]'))) estat.set(v[0], { n: v[1], mx: v[2], my: v[3], sx: v[4], sy: v[5] }); } catch (e) { estat.clear(); }
+const regras = new Map();
+try { for (const v of JSON.parse(lembrar('regras', '[]'))) regras.set(v[0], { para: v[1], n: v[2] }); } catch (e) { regras.clear(); }
+let conf = [0, 0, 0, 0];
+try { const c = JSON.parse(lembrar('conf', '[0,0,0,0]')); if (Array.isArray(c) && c.length === 4) conf = c.map(x => Math.max(0, Math.min(9, x | 0))); } catch (e) { conf = [0, 0, 0, 0]; }
+
+function medirTeclado() {                  // centros e vizinhas das teclas de caractere, em unidades de tecla
+  const r = c => els.find(e => e._d.c === c).getBoundingClientRect();
+  const uw = r('h').left - r('g').left, uh = r('g').top - r('t').top, k = kb.getBoundingClientRect();
+  if (!(uw > 0 && uh > 0)) { geo = null; return; }
+  const letras = els.filter(e => e._d.t === 'c' && e._d.w === 4), centros = new Map(), viz = new Map();
+  for (const e of letras) { const b = e.getBoundingClientRect(); centros.set(e, emTeclas(b.left + b.width / 2, b.top + b.height / 2, [k.left, k.top], uw, uh)); }
+  for (const e of letras) { const a = centros.get(e); viz.set(e, letras.filter(o => o !== e && Math.hypot(centros.get(o)[0] - a[0], centros.get(o)[1] - a[1]) < 1.45)); }
+  geo = { uw, uh, centros, viz };
+}
+addEventListener('resize', () => { geo = null; });
+function lerToque(el, cx, cy) {            // { u, v } = onde caiu em relação ao centro; alt, p = a vizinha mais provável e a chance dela
+  if (!geo) medirTeclado();
+  if (!geo || !geo.centros.has(el)) return null;
+  const k = kb.getBoundingClientRect(), bruto = emTeclas(cx, cy, [k.left, k.top], geo.uw, geo.uh);
+  const X = bruto[0] - 0.7 * deriva[0], Y = bruto[1] - 0.7 * deriva[1];          // compensa a deriva da mão
+  const nota = e => {
+    const c = geo.centros.get(e), q = estat.get(e._d.c), sabe = q && q.n >= 8;
+    const dx = (X - c[0] - (sabe ? q.mx : 0)) / (sabe ? Math.max(0.2, q.sx) : 0.33), dy = (Y - c[1] - (sabe ? q.my : 0)) / (sabe ? Math.max(0.2, q.sy) : 0.33);
+    return Math.exp(-0.5 * (dx * dx + dy * dy));
+  };
+  let soma = nota(el), alt = null, maior = 0;
+  for (const o of geo.viz.get(el)) { const n = nota(o); soma += n; if (n > maior) { maior = n; alt = o; } }
+  const c = geo.centros.get(el);
+  return { u: bruto[0] - c[0], v: bruto[1] - c[1], alt, p: soma > 0 ? maior / soma : 0 };
+}
+function aprenderToque(t) {                // só entra o toque que não foi apagado logo em seguida
+  let q = estat.get(t.c);
+  if (!q) estat.set(t.c, q = { n: 0, mx: 0, my: 0, sx: 0.33, sy: 0.33 });
+  q.n = Math.min(150, q.n + 1);
+  const a = 1 / q.n, dx = t.u - q.mx, dy = t.v - q.my;
+  q.mx += a * dx; q.my += a * dy;
+  q.sx = Math.sqrt((1 - a) * (q.sx * q.sx + a * dx * dx)); q.sy = Math.sqrt((1 - a) * (q.sy * q.sy + a * dy * dy));
+  janelaDeriva.push([t.u, t.v]); if (janelaDeriva.length > 16) janelaDeriva.shift();
+  deriva = derivaDe(janelaDeriva);
+  if (++gravacoes % 25 === 0) guardarToque();
+}
+function guardarToque() { guardar('toque', JSON.stringify(Array.from(estat, x => [x[0], x[1].n, +x[1].mx.toFixed(3), +x[1].my.toFixed(3), +x[1].sx.toFixed(3), +x[1].sy.toFixed(3)]))); }
+function bater() {                         // ritmo: intervalos entre teclas no modo prompt
+  const agora = performance.now();
+  if (ultimaBatida && agora - ultimaBatida < 2000) { batidas.push(agora - ultimaBatida); if (batidas.length > 24) batidas.shift(); }
+  ultimaBatida = agora;
+}
+function pausaDoRitmo() {                  // quanto esperar parado antes de chamar a célula: 4 teclas no seu ritmo sustentado
+  const t = taxaSustentada(batidas);
+  return t > 0 ? Math.max(380, Math.min(1100, Math.round(4000 / t))) : 700;
+}
+function ambiguos() {                      // toques em dúvida nas últimas letras digitadas em sequência: [posição a partir do fim, letra, vizinha, chance]
+  const v = ta.value, a = [];
+  for (let i = 0; i < Math.min(60, cauda.length, v.length); i++) { const r = cauda[cauda.length - 1 - i]; if (r && v[v.length - 1 - i] === r.ch) a.push([i + 1, r.ch, r.alt, r.p]); }
+  return a;
+}
+function confirmarCorrecao(de, para) {     // R3: conta a repetição; na terceira vira regra
+  const r = regras.get(de);
+  if (r && r.para === para) r.n++; else regras.set(de, { para, n: 1 });
+  if (regras.size > 300) regras.delete(regras.keys().next().value);
+  guardar('regras', JSON.stringify(Array.from(regras, x => [x[0], x[1].para, x[1].n])));
+}
+function autotesteCamada0() {              // lista do que reprovou; vazia = calibrada
+  const f = [];
+  for (const fila of FILAS) if (fila.reduce((a, d) => a + d.w, 0) !== 60) f.push('R8');                 // R8, invariante (ISL 2016 N7, na leitura de área inteira): cada fileira fecha as 60 colunas
+  const p = emTeclas(310, 205, [10, 5], 60, 50), q = emTeclas(310 * 2.5, 205 * 2.5, [25, 12.5], 150, 125);
+  if (Math.abs(p[0] - q[0]) > 1e-9 || Math.abs(p[1] - q[1]) > 1e-9 || Math.abs((150 * 125) / (60 * 50) - 2.5 * 2.5) > 1e-9) f.push('R7');
+  if (separacao(0, 1) !== 1 || separacao(0.5, 0.5) !== 0 || !(separacao(0.2, 0.8) > separacao(0.4, 0.6))) f.push('R5');
+  const mao = []; for (let i = 0; i < 16; i++) mao.push([0.2 + (i % 3 - 1) * 0.02, -0.1 + (i % 2) * 0.02]);
+  const d1 = derivaDe(mao), solto = mao.map(() => [0, 0]); solto[5] = [0.6, 0.4]; const d2 = derivaDe(solto);
+  if (Math.abs(d1[0] - 0.2) > 0.03 || Math.abs(d1[1] + 0.09) > 0.03 || d2[0] !== 0 || d2[1] !== 0) f.push('R6');
+  const ini = [3, 7, 8, 13, 15], a = maxMais(ini, 220);
+  let l = 1; for (let k = 2; k <= ini.length; k++) if (a[k] * l > a[l] * k) l = k;
+  for (let n = 120; n <= 220; n++) if (a[n] !== a[l] + a[n - l]) { f.push('R4'); break; }
+  if (Math.abs(taxaSustentada([200, 200, 200, 200, 900, 100, 100, 100, 100]) - 10) > 1e-9) f.push('R4b');
+  const s = [1]; for (let n = 1; n < 40; n++) s.push(s.filter(x => x === s[n - 1]).length);              // a_n = quantas vezes a_{n-1} já apareceu
+  for (let n = 1; n < 39; n += 2) if (s[n] !== 1 || s[n + 1] !== (n + 3) / 2) { f.push('R3'); break; }
+  if (contagens(['a', 'b', 'a', 'a']).join() !== '1,1,2,3') f.push('R3b');
+  if (pesoDe(0) !== 1 || !(pesoDe(1) < 1) || !(pesoDe(2) < pesoDe(1)) || pesoDe(5) !== 0) f.push('R2');
+  return f;
+}
+const FALHAS_C0 = autotesteCamada0();
+document.documentElement.dataset.reguas = FALHAS_C0.length ? FALHAS_C0.join(',') : 'ok';
+
+/* ---------------------------------------------------------------- */
 /* Do toque à ação                                                   */
 /* ---------------------------------------------------------------- */
 const LOCAIS = new Set(['Enter', 'Backspace', 'Delete', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
 const REPETE = new Set(['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown']);
 
-function emitir(txt) {
-  if (modo === 'prompt') return inserir(txt);
+function emitir(txt, reg) {
+  if (modo === 'prompt') return inserir(txt, reg);
   if (enviarTecla({ a: 'u', s: txt })) { fluxo = (fluxo + txt).slice(-200); atualizarChips(); }
 }
 function acaoDe(d) {          // devolve a função que executa (e repete) a tecla, ou null
@@ -632,7 +840,13 @@ function acaoDe(d) {          // devolve a função que executa (e repete) a tec
     }
     armar(true);
     const txt = compor((d.letra ? shift !== caps : shift) ? d.s : d.c, d.el);
-    return txt === null ? null : () => emitir(txt);
+    const lido = toqueAtual;
+    let reg = null, primeira = true;                        // toque em dúvida: guarda a vizinha provável para o leitor "toque"
+    if (lido && lido.alt && lido.p >= 0.28 && txt && txt.length === 1) {
+      const o = lido.alt._d, viz = (o.letra ? shift !== caps : shift) ? o.s : o.c;
+      if (viz && viz !== txt && !MORTAS[viz]) reg = { ch: txt, alt: viz, p: Math.round(lido.p * 100) / 100 };
+    }
+    return txt === null ? null : () => { emitir(txt, primeira ? reg : null); primeira = false; };
   }
   if (d.k === 'Backspace' && morta !== null && !cmd) { soltarMorta(); armar(true); return null; }   // cancela o acento
   const pend = soltarMorta(); if (pend) emitir(pend);
@@ -666,6 +880,10 @@ kb.addEventListener('pointerdown', e => {
   const d = el._d, h = { el };
   dedos.set(e.pointerId, h);
   marcar(d, true);
+  toqueAtual = d.t === 'c' ? lerToque(el, e.clientX, e.clientY) : null;
+  if (toqueAtual) { filaToque.push({ c: d.c, u: toqueAtual.u, v: toqueAtual.v }); if (filaToque.length > 5) aprenderToque(filaToque.shift()); }
+  else if (d.k === 'Backspace') filaToque.pop();           // apagou em seguida: aquele toque não ensina nada
+  if (modo === 'prompt' && d.t !== 'm') bater();
   if (d.t === 'm') { h.mod = d.k; modBaixa(d.k); pintar(); return; }
   if (d.t === 'x') { if (d.k === 'caps') { caps = !caps; pintar(); } else trocarModo(modo === 'prompt' ? 'direto' : 'prompt'); return; }
   const f = acaoDe(d);
@@ -678,7 +896,7 @@ addEventListener('pointerup', e => soltar(e.pointerId));
 addEventListener('pointercancel', e => soltar(e.pointerId));
 addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { soltarTudo(true); pararTela(); }     // tablet apagado: solta tudo e para os quadros
+  if (document.hidden) { soltarTudo(true); pararTela(); guardarToque(); }     // tablet apagado: solta tudo e para os quadros
   else { acordar(); pedirTela(); }
 });
 
@@ -699,6 +917,7 @@ function trocarModo(m) {
   if (modo === m) return;
   modo = m; fluxo = '';
   const pend = soltarMorta();
+  cauda = [];
   if (m === 'prompt') { ta.focus({ preventScroll: true }); if (pend) inserir(pend); }
   else ta.blur();
   ta.placeholder = m === 'prompt' ? DICA_PROMPT : DICA_DIRETO;
@@ -707,7 +926,7 @@ function trocarModo(m) {
 const DICA_DIRETO = ta.placeholder;
 const DICA_PROMPT = 'Escreva o prompt. Enter envia ao notebook, Shift+Enter quebra a linha, Tab aceita a sugestão, Esc volta ao modo direto.';
 ta.addEventListener('focus', () => trocarModo('prompt'));
-ta.addEventListener('input', mudou);                       // se o teclado do Android for usado no campo
+ta.addEventListener('input', () => { cauda = []; mudou(); });                       // se o teclado do Android for usado no campo
 ta.addEventListener('scroll', () => { espelho.scrollTop = ta.scrollTop; });
 document.addEventListener('selectionchange', () => { if (document.activeElement === ta) { pintarFantasma(); atualizarChips(); } });
 
@@ -716,9 +935,29 @@ document.addEventListener('selectionchange', () => { if (document.activeElement 
 /* ---------------------------------------------------------------- */
 const alto = c => c >= 0xd800 && c <= 0xdbff, baixoS = c => c >= 0xdc00 && c <= 0xdfff;
 const noFim = () => ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length;
-function inserir(s) { ta.setRangeText(s, ta.selectionStart, ta.selectionEnd, 'end'); mudou(); }
+function inserir(s, reg) {                  // reg definido (mesmo null) = tecla tocada em sequência; indefinido = outra origem
+  const noFimAntes = noFim(), tocada = reg !== undefined;
+  ultimaAuto = null;
+  if (tocada && noFimAntes && /^[\s.,;:!?)]$/.test(s)) {    // fim de palavra: aplica a regra fixa, se houver (R3)
+    const m = /[\p{L}\p{N}_'-]+$/u.exec(ta.value), r = m && regras.get(m[0]);
+    if (r && r.n >= REPETE_PARA_VIRAR_REGRA) { ta.setRangeText(r.para, ta.value.length - m[0].length, ta.value.length, 'end'); ultimaAuto = { de: m[0], para: r.para, term: s }; cauda = []; }
+  }
+  ta.setRangeText(s, ta.selectionStart, ta.selectionEnd, 'end');
+  if (tocada && noFimAntes && !ultimaAuto) { for (let i = 1; i < s.length; i++) cauda.push(null); cauda.push(reg); if (cauda.length > 80) cauda.splice(0, cauda.length - 80); }
+  else cauda = [];
+  mudou();
+}
 function apagar(frente) {
   const v = ta.value;
+  if (!frente && ultimaAuto && noFim() && v.endsWith(ultimaAuto.para + ultimaAuto.term)) {      // Backspace logo depois de uma regra: desfaz e rebaixa a regra
+    const r = regras.get(ultimaAuto.de);
+    if (r) { r.n = Math.max(0, r.n - 2); guardar('regras', JSON.stringify(Array.from(regras, x => [x[0], x[1].para, x[1].n]))); }
+    ta.setRangeText(ultimaAuto.de, v.length - ultimaAuto.para.length - ultimaAuto.term.length, v.length, 'end');
+    ultimaAuto = null; cauda = [];
+    return mudou();
+  }
+  ultimaAuto = null;
+  if (!frente && noFim()) cauda.pop(); else cauda = [];
   let a = ta.selectionStart, b = ta.selectionEnd;
   if (a === b) {
     if (frente) { if (b >= v.length) return; b += alto(v.charCodeAt(b)) && baixoS(v.charCodeAt(b + 1)) ? 2 : 1; }
@@ -735,7 +974,7 @@ function editar(k, shift) {
     case 'Enter': if (shift) inserir('\n'); else mandar(false); break;
     case 'Backspace': apagar(false); break;
     case 'Delete': apagar(true); break;
-    case 'Tab': if (fantasmaVale()) inserir(fantasma); else if (chipsAtuais.length) usarChip(chipsAtuais[0]); break;
+    case 'Tab': if (fantasmaVale()) inserir(fantasma); else if (correcoes.length) aplicarCorrecao(correcoes[0]); else if (chipsAtuais.length) usarChip(chipsAtuais[0]); break;
     case 'Escape': if (fantasma) { fantasma = ''; pintarFantasma(); } else trocarModo('direto'); break;
     case 'ArrowLeft': cursor(a !== b ? a : a - 1); break;
     case 'ArrowRight': cursor(a !== b ? b : b + 1); break;
@@ -750,7 +989,8 @@ function mandar(comEnter) {
   if (!s.trim()) return;
   if (!enviarTecla({ a: 'txt', s, enter: !!comEnter })) return;
   aprender(s.trim());                                      // só o que sai do rascunho vira aprendizado
-  ta.value = ''; fantasma = '';
+  exemplos.push(s.trim().slice(0, 800)); if (exemplos.length > 25) exemplos.shift();
+  ta.value = ''; fantasma = ''; cauda = []; correcoes = []; aposta = null; guardarToque();
   mudou();
 }
 
@@ -772,6 +1012,8 @@ function mudou() {
     if (v.length > fantasmaDe.length && v.length < cheio.length && cheio.startsWith(v)) { fantasma = cheio.slice(v.length); fantasmaDe = v; }
     else if (v !== fantasmaDe) fantasma = '';
   }
+  correcoes = correcoes.filter(c => temPalavra(v, c.de));
+  pontuar();
   pintarFantasma(); atualizarChips(); agendarIA(); botoes();
 }
 
@@ -821,6 +1063,12 @@ function atualizarChips() {
   chipsAtuais = prever(c.ant, c.parcial);
   const cx = $('chips');
   cx.textContent = '';
+  if (modo === 'prompt') for (const c of correcoes.slice(0, 2)) {       // o que dois ou mais leitores corrigiram igual
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip corr'; b.textContent = c.de + ' \u2192 ' + c.para;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); aplicarCorrecao(c); });
+    cx.append(b);
+  }
   for (const w of chipsAtuais) {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = w;
@@ -830,56 +1078,107 @@ function atualizarChips() {
 }
 function usarChip(w) {
   const n = contexto().parcial.length;
-  if (modo === 'prompt') { ta.setRangeText(w + ' ', ta.selectionStart - n, ta.selectionEnd, 'end'); mudou(); return; }
+  if (modo === 'prompt') { ta.setRangeText(w + ' ', ta.selectionStart - n, ta.selectionEnd, 'end'); cauda = []; mudou(); return; }
   for (let i = 0; i < n; i++) enviarTecla({ a: 'k', k: 'Backspace', m: 0 });
   if (enviarTecla({ a: 'u', s: w + ' ' })) fluxo = (fluxo.slice(0, fluxo.length - n) + w + ' ').slice(-200);
   atualizarChips();
 }
 
 /* ---------------------------------------------------------------- */
-/* IA: completar (automático), sugerir e melhorar (sob pedido)       */
+/* Célula de 4 leitores: ler (ao digitar) e propor (sob pedido)      */
 /* ---------------------------------------------------------------- */
-let iaAuto = lembrar('auto', '1') === '1', iaSeq = 0, tIA = 0, erroIA = '';
-const pend = {};
-function pedirIA(kind) {
-  const id = ++iaSeq;
-  pend[kind] = { id, de: ta.value };
-  if (!enviar({ a: 'ai', id, kind, draft: ta.value })) delete pend[kind];
-  botoes();
+let iaAuto = lembrar('auto', '1') === '1', nCel = 0, tIA = 0, erroIA = '', correcoes = [], aposta = null, chaveCel = '';
+const pend = {};                                           // pend.ler, pend.sugerir, pend.melhorar: { n, de, corte }
+const reEsc = w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const temPalavra = (texto, w) => new RegExp('(^|[^\\p{L}\\p{N}_])' + reEsc(w) + '($|[^\\p{L}\\p{N}_])', 'u').test(texto);
+function leds(estado, m) {                                 // os quatro leitores: chamados; depois, quem respondeu e quem concordou com o que foi aproveitado
+  const luz = $('cel').children, apoio = new Set();
+  if (m) {
+    for (const j of m.apoioT || []) apoio.add(j);
+    for (const c of m.corr || []) for (const j of c.apoio || []) apoio.add(j);
+    if (m.cartoes && m.cartoes[0]) for (const j of m.cartoes[0].apoio || []) apoio.add(j);
+  }
+  for (let j = 0; j < 4; j++) luz[j].className = estado === 'cham' ? 'cham' : !m || !m.juizes || !m.juizes[j] ? '' : !m.juizes[j].ok ? 'err' : apoio.has(j) ? 'sim' : 'ok';
 }
-function agendarIA() {
+function pedirCelula(op, modo) {                           // um pedido, uma resposta; n identifica a foto do texto
+  if (FALHAS_C0.length) return avisar('A célula não foi ligada: o autoteste interno deste tablet reprovou.');
+  const txt = ta.value, cortado = txt.slice(op === 'ler' ? -700 : -6000), chave = op === 'ler' ? 'ler' : modo;
+  const p = { op, modo, n: ++nCel, txt: cortado, janela: $('janela').textContent, pesos: conf.map(pesoDe), api: est.api,
+    exemplos: exemplos.slice(op === 'ler' ? -10 : -25), regras: Array.from(regras).slice(-20).map(x => [x[0], x[1].para]) };
+  if (op === 'ler') p.amb = ambiguos();
+  else if (telaOn && temBase && lona.width) { try { p.img = lona.toDataURL('image/jpeg', 0.6).split(',')[1]; } catch (e) { /* segue sem imagem */ } }
+  pend[chave] = { n: p.n, de: txt, corte: txt.length - cortado.length };
+  leds('cham'); botoes();
+  if (INFO.modo === 'relay' && est.celRelay && chaveCel) {  // caminho curto: direto ao relay, que tem as chaves; não passa pelo notebook
+    fetch('/celula', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-teclado': chaveCel }, body: JSON.stringify(p) })
+      .then(r => r.json()).then(chegouCelula).catch(() => chegouCelula({ n: p.n, op, modo, erro: 'A célula não respondeu.' }));
+  } else if (!enviar(Object.assign({ a: 'cel' }, p))) { delete pend[chave]; leds(''); botoes(); }
+}
+function agendarIA() {                                     // chama a célula quando você para, na medida do seu ritmo (R4)
   clearTimeout(tIA);
-  if (!iaAuto || !est.ia || !pronto || modo !== 'prompt' || fantasmaVale() || !noFim() || ta.value.trim().length < 12) return;
-  tIA = setTimeout(() => pedirIA('completar'), 750);
+  if (!iaAuto || !est.cel || !pronto || modo !== 'prompt' || fantasmaVale() || !noFim() || ta.value.trim().length < 6) return;
+  tIA = setTimeout(() => pedirCelula('ler'), pausaDoRitmo());
 }
-function chegouIA(m) {
-  const p = pend[m.kind];
-  if (!p || p.id !== m.id) return;                          // resposta de um pedido antigo
-  delete pend[m.kind];
-  botoes();
-  if (m.erro) { if (m.kind !== 'completar' || m.erro !== erroIA) avisar(m.erro); erroIA = m.erro; return; }
+function chegouCelula(m) {
+  const chave = m.op === 'propor' ? m.modo : 'ler', p = pend[chave];
+  if (!p || p.n !== m.n) return;                           // resposta de uma foto antiga do texto: descartada
+  delete pend[chave];
+  leds('', m); botoes();
+  const semCartao = m.op === 'propor' && !(m.cartoes && m.cartoes.length);
+  if (m.erro && (m.op !== 'propor' || semCartao)) { if (chave !== 'ler' || m.erro !== erroIA) avisar(m.erro); erroIA = m.erro; return; }
   erroIA = '';
-  if (m.kind === 'completar') {
-    const t = /\s$/.test(p.de) ? String(m.text || '').replace(/^\s+/, '') : String(m.text || '');   // sem espaço dobrado na emenda
-    if (ta.value !== p.de || !t) return;
-    fantasma = t; fantasmaDe = p.de;
-    pintarFantasma();
+  if (m.op !== 'propor') {
+    if (ta.value !== p.de) return;                         // o texto mudou enquanto os leitores liam
+    correcoes = (m.corr || []).filter(c => c && typeof c.de === 'string' && typeof c.para === 'string' && temPalavra(p.de, c.de)).slice(0, 4);
+    const t = /\s$/.test(p.de) ? String(m.t || '').replace(/^\s+/, '') : String(m.t || '');
+    if (t) { fantasma = t; fantasmaDe = p.de; }
+    aposta = { de: p.de, ini: p.corte + (m.ini | 0), w1: Array.isArray(m.w1) ? m.w1 : [] };
+    pintarFantasma(); atualizarChips();
     return;
   }
-  abrirFolha(m.kind === 'sugerir' ? 'Sugestões para agora' : 'Rascunho melhorado', m.itens || []);
+  if (semCartao) return avisar('Os leitores não chegaram a nenhuma proposta.');
+  abrirFolha(m.modo === 'melhorar' ? 'Rascunho melhorado' : 'Sugestões para agora', m.cartoes);
 }
-function abrirFolha(titulo, itens) {
+function aplicarCorrecao(c) {                              // troca a última ocorrência da palavra e conta a confirmação (R3)
+  const v = ta.value, noFimAntes = noFim(), re = new RegExp('(^|[^\\p{L}\\p{N}_])' + reEsc(c.de) + '(?=$|[^\\p{L}\\p{N}_])', 'gu');
+  let ultimo = null, m;
+  while ((m = re.exec(v))) ultimo = m;
+  correcoes = correcoes.filter(x => x !== c);
+  if (!ultimo) return atualizarChips();
+  const ini = ultimo.index + ultimo[1].length, cursor = ta.selectionStart;
+  ta.setRangeText(c.para, ini, ini + c.de.length, 'end');
+  const novo = noFimAntes ? ta.value.length : cursor > ini ? cursor + c.para.length - c.de.length : cursor;
+  ta.setSelectionRange(novo, novo);
+  confirmarCorrecao(c.de, c.para);
+  cauda = [];
+  mudou();
+}
+function pontuar() {                                       // R2: o que você digitou depois é o gabarito da previsão de cada leitor
+  if (!aposta) return;
+  const v = ta.value;
+  if (!v.startsWith(aposta.de.slice(0, aposta.ini))) { aposta = null; return; }      // voltou e mudou o que havia: sem gabarito
+  const feitas = Array.from(v.slice(aposta.ini).matchAll(/([\p{L}\p{N}_'-]+)(?=[^\p{L}\p{N}_'-])/gu), m => semAcento(m[1]).toLowerCase());   // palavras já terminadas
+  const previsoes = aposta.w1.map(w => (Array.isArray(w) && typeof w[1] === 'string' ? w : null));
+  if (!previsoes.some(Boolean)) { aposta = null; return; }
+  if (feitas.length <= Math.max(...previsoes.map(w => (w ? w[0] : 0)))) return;       // ainda falta terminar a palavra prevista
+  previsoes.forEach((w, j) => { if (w && j < 4) conf[j] = feitas[w[0]] === w[1] ? 0 : Math.min(9, conf[j] + 1); });
+  aposta = null;
+  guardar('conf', JSON.stringify(conf));
+}
+function abrirFolha(titulo, cartoes) {
   $('folhaTitulo').textContent = titulo + '. Toque em uma para levar ao rascunho.';
   const cx = $('cartoes');
   cx.textContent = '';
   cx.style.display = 'grid'; cx.style.gap = '10px';
-  for (const t of itens) {
-    const b = document.createElement('button');
-    b.type = 'button'; b.className = 'cartao'; b.textContent = t;
+  for (const c of cartoes) {
+    const b = document.createElement('button'), tag = document.createElement('span'), n = (c.apoio || []).length;
+    b.type = 'button'; b.className = 'cartao'; b.textContent = c.p;
+    tag.className = 'tag'; tag.textContent = n >= 2 ? n + ' de 4 leitores chegaram a esta proposta' : 'um leitor só: sem consenso';
+    b.append(tag);
     b.addEventListener('click', () => {
       $('folha').hidden = true;
-      ta.value = t; ta.setSelectionRange(t.length, t.length);
-      fantasma = '';
+      ta.value = c.p; ta.setSelectionRange(c.p.length, c.p.length);
+      fantasma = ''; cauda = []; correcoes = []; aposta = null;
       trocarModo('prompt'); mudou();
     });
     cx.append(b);
@@ -898,15 +1197,15 @@ function botoes() {
   $('bSug').classList.toggle('espera', !!pend.sugerir);
   $('bMel').classList.toggle('espera', !!pend.melhorar);
   kb.classList.toggle('pensando', !!(pend.sugerir || pend.melhorar));
-  $('bAuto').classList.toggle('on', iaAuto && est.ia);
+  $('bAuto').classList.toggle('on', iaAuto && !!est.cel);
   $('bTela').classList.toggle('on', telaOn && est.tela);
   $('telaMsg').textContent = !est.tela && pronto ? 'o notebook não tem captura de tela' : telaOn ? 'aguardando a tela do notebook' : 'mini-tela desligada';
 }
 const semFoco = (id, f) => $(id).addEventListener('pointerdown', e => { e.preventDefault(); if (!$(id).disabled) f(); });
 semFoco('bEnv', () => mandar(false));
 semFoco('bEnvE', () => mandar(true));
-semFoco('bSug', () => pedirIA('sugerir'));
-semFoco('bMel', () => pedirIA('melhorar'));
+semFoco('bSug', () => pedirCelula('propor', 'sugerir'));
+semFoco('bMel', () => pedirCelula('propor', 'melhorar'));
 semFoco('bApi', () => {                                    // alterna entre as APIs que têm chave no notebook; as cores acompanham
   const lista = est.apis || [], i = lista.findIndex(a => a.id === est.api);
   for (let k = 1; k < lista.length; k++) { const c = lista[(i + k) % lista.length]; if (c.ok) return enviar({ a: 'api', id: c.id }); }
@@ -914,7 +1213,7 @@ semFoco('bApi', () => {                                    // alterna entre as A
   avisar(outra ? 'Para usar o ' + outra.nome + ', guarde a chave no notebook: node teclado.js --chave ' + outra.id + '=SUA_CHAVE' : 'Só há uma API de IA configurada.');
 });
 semFoco('bAuto', () => {
-  if (!est.ia) return avisar('IA desligada: falta a chave da API no notebook (veja o terminal do teclado.js).');
+  if (!est.cel) return avisar('IA desligada: falta a chave da API (Environment do Render, ou --chave no notebook).');
   iaAuto = !iaAuto; guardar('auto', iaAuto ? '1' : '0');
   if (!iaAuto) { fantasma = ''; pintarFantasma(); }
   botoes(); agendarIA();

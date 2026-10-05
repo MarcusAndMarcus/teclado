@@ -1,6 +1,6 @@
 {
   "name": "teclado",
-  "version": "0.3.0",
+  "version": "0.7.1",
   "private": true,
   "description": "Tablet como teclado do notebook: Wi-Fi direto ou relay cifrado, rascunho de prompts com IA e mini-tela",
   "scripts": {
