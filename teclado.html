@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#060709">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icone-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Teclado</title>
+<style>
+:root {
+  --fundo: #060709;     /* mesa */
+  --chapa: #0e0f13;     /* paineis */
+  --saia: #111217;      /* lateral das teclas */
+  --topo: #2b2d36;      /* face das teclas de caractere (alto) */
+  --topo-b: #20222a;    /* face das teclas de caractere (baixo) */
+  --cmd: #1c1d23;       /* face das teclas de comando */
+  --leg: #eef0f6;       /* legendas */
+  --leg-cmd: #a9adbd;   /* legendas das teclas de comando */
+  --leg2: #7a7e8e;      /* legenda secundaria */
+  --luz-a: #7a35f0;     /* luz sob as teclas: muda com a API (ver TEMAS no script) */
+  --luz-m: #dd4a8a;
+  --luz-b: #ff8a1f;
+  --alerta: #ff6161;
+  --tinta: #eef0f6;
+  --nevoa: #71758a;
+  --fresta: #2b2d38;
+  --vao: 6px;
+  --raio: 9px;
+  --barra: 30px;
+  --fonte: Roboto, "Segoe UI", system-ui, sans-serif;
+  --feixe: linear-gradient(100deg, var(--luz-a), var(--luz-m), var(--luz-b));
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  height: 100%; margin: 0; background: var(--fundo); color: var(--tinta);
+  overflow: hidden; overscroll-behavior: none; touch-action: none;
+  -webkit-user-select: none; user-select: none;
+  font: 500 14px/1.2 var(--fonte);
+}
+body {
+  position: fixed; inset: 0; display: grid;
+  grid-template-rows: var(--barra) clamp(118px, 26vh, 240px) minmax(0, 1fr);
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+button { font: inherit; color: inherit; touch-action: manipulation; }
+
+/* barra de estado */
+#barra { display: flex; align-items: center; gap: 10px; padding: 0 10px; min-width: 0; color: var(--leg-cmd); font-size: 13px; }
+#luz { flex: none; width: 8px; height: 8px; border-radius: 50%; background: #3a3c47; }
+#luz.ok { background: #e9ecf5; box-shadow: 0 0 6px 1px rgba(233, 236, 245, .55); }
+#luz.off { background: var(--alerta); box-shadow: 0 0 6px 1px rgba(255, 97, 97, .5); }
+#estado { flex: none; max-width: 44vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#janela { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tinta); font-weight: 400; }
+#eco { flex: none; color: var(--leg); }
+#ping { flex: none; font-variant-numeric: tabular-nums; }
+#ping.atraso { color: var(--alerta); }
+.chave { flex: none; border: 1px solid var(--fresta); background: transparent; color: var(--leg-cmd); border-radius: 999px; padding: 3px 11px; font-size: 12px; }
+.chave.on { border-color: transparent; color: var(--leg); background: linear-gradient(var(--fundo), var(--fundo)) padding-box, var(--feixe) border-box; }
+.chave[hidden] { display: none; }
+
+/* painel: rascunho + mini-tela */
+#painel { display: flex; gap: var(--vao); padding: 0 var(--vao); min-height: 0; }
+#comp { flex: 1; min-width: 0; display: flex; flex-direction: column; border: 1.5px solid transparent; border-radius: 12px; overflow: hidden;
+  background: linear-gradient(var(--chapa), var(--chapa)) padding-box, linear-gradient(var(--fresta), var(--fresta)) border-box; }
+body.prompt #comp { background: linear-gradient(var(--chapa), var(--chapa)) padding-box, var(--feixe) border-box; }
+#campo { position: relative; flex: 1; min-height: 0; }
+#ta, #espelho {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 8px 12px; border: 0;
+  font: 400 17px/1.4 var(--fonte); letter-spacing: 0; text-align: left;
+  white-space: pre-wrap; overflow-wrap: break-word; word-break: normal;
+  overflow-y: auto; overflow-x: hidden; scrollbar-width: none;
+}
+#ta::-webkit-scrollbar, #espelho::-webkit-scrollbar { display: none; }
+#ta { background: transparent; color: var(--tinta); resize: none; outline: none; caret-color: var(--luz-b); -webkit-user-select: text; user-select: text; touch-action: manipulation; }
+#ta::placeholder { color: var(--nevoa); }
+#espelho { color: transparent; pointer-events: none; overflow: hidden; }
+#espelho .fant { color: var(--nevoa); }
+#faixa { display: flex; align-items: center; gap: 6px; padding: 0 6px 6px; min-height: 40px; }
+#chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow: hidden; }
+.chip { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; border-radius: 8px; padding: 8px 14px; font-size: 15px;
+  background: linear-gradient(var(--topo), var(--topo-b)); color: var(--leg); box-shadow: 0 2px 0 #000, inset 0 1px 0 rgba(255, 255, 255, .07); }
+.acao { flex: none; border: 1px solid var(--fresta); border-radius: 9px; padding: 8px 12px; background: #15161b; color: var(--tinta); font-size: 14px; }
+.acao.forte { border: 1.5px solid transparent; background: linear-gradient(#191a20, #191a20) padding-box, var(--feixe) border-box; }
+.acao:disabled { opacity: .38; }
+.acao.espera { color: var(--nevoa); }
+.chip:active, .acao:active, .chave:active { transform: translateY(1px); filter: brightness(1.4); }
+
+#tela { flex: none; position: relative; height: 100%; aspect-ratio: 16 / 10; max-width: 36vw; padding: 0; border: 1px solid var(--fresta); border-radius: 12px; overflow: hidden; background: #020203; color: var(--nevoa); font-size: 13px; }
+#tela canvas { display: none; width: 100%; height: 100%; object-fit: contain; }
+#tela.tem canvas { display: block; }
+#telaInfo { position: absolute; right: 6px; bottom: 4px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, .6); color: var(--leg-cmd); font-size: 11px; font-variant-numeric: tabular-nums; }
+#telaInfo:empty { display: none; }
+#tela.tem #telaMsg { display: none; }
+#telaMsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 10px; text-align: center; }
+#tela.grande { position: fixed; z-index: 20; left: 0; right: 0; top: var(--barra); bottom: 0; width: auto; height: auto; max-width: none; aspect-ratio: auto; border: 0; border-radius: 0; }
+
+/* teclado mecanico: caixa escura, chapa iluminada, teclas opacas.
+   A luz da API so aparece nos vaos, ao redor das teclas. */
+#caixa { display: flex; min-height: 0; margin: 4px var(--vao) var(--vao); padding: 7px; border-radius: 17px;
+  background: linear-gradient(#1c1d23, #0c0d10); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), inset 0 -1px 0 #000; }
+#kb { flex: 1; min-width: 0; min-height: 0; isolation: isolate; display: grid; gap: var(--vao); padding: var(--vao); border-radius: 11px;
+  grid-template-columns: repeat(60, minmax(0, 1fr)); grid-template-rows: minmax(0, .68fr) repeat(5, minmax(0, 1fr));
+  background: linear-gradient(100deg, var(--luz-a), var(--luz-m), var(--luz-b), var(--luz-m), var(--luz-a)) 0 0 / 200% 100% repeat;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .6); }
+#kb.pensando { animation: onda 2.4s linear infinite; }   /* a luz corre enquanto a IA responde a um pedido */
+@keyframes onda { to { background-position: 200% 0; } }
+.tecla {
+  grid-column: span var(--w); position: relative; isolation: isolate; min-width: 0; min-height: 0;
+  display: flex; align-items: center; justify-content: center; padding-bottom: 4px;
+  background: var(--saia); border-radius: var(--raio); box-shadow: 0 0 0 1px rgba(0, 0, 0, .8);
+  color: var(--leg); font-size: clamp(15px, 3.6vh, 29px); line-height: 1;
+  transition: box-shadow .22s ease-out;
+}
+.tecla::before {            /* a face da tecla, recuada: sobra a saia em volta, maior embaixo */
+  content: ""; position: absolute; z-index: -1; top: 3px; left: 4px; right: 4px; bottom: 7px; border-radius: 7px;
+  background: linear-gradient(var(--topo), var(--topo-b)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 1px 0 rgba(0, 0, 0, .55);
+}
+.tecla.cmd { color: var(--leg-cmd); font-size: clamp(11px, 2.1vh, 17px); letter-spacing: .02em; }
+.tecla.cmd::before { background: var(--cmd); }
+.tecla svg { width: 1.6em; height: 1.6em; pointer-events: none; }
+.tecla.cmd svg { width: 2.1em; height: 2.1em; }
+.tecla span, .tecla i { pointer-events: none; }
+.tecla .s { position: absolute; top: 13%; left: 15%; font-size: .5em; color: var(--leg2); }
+#kb.shift .tecla .p:not(.l) { position: absolute; top: 13%; left: 15%; font-size: .5em; color: var(--leg2); }
+#kb.shift .tecla .s { position: static; font-size: 1em; color: inherit; }
+#kb.maius .tecla .l { text-transform: uppercase; }
+.tecla.guia::after { content: ""; position: absolute; bottom: 21%; width: 18%; height: 3px; border-radius: 2px; background: var(--leg2); }
+.led { position: absolute; top: 15%; right: 13%; width: 7px; height: 7px; border-radius: 50%; background: #33353e; box-shadow: inset 0 1px 1px rgba(0, 0, 0, .7); }
+
+/* Enter em L (ISO/ABNT2): duas pecas com a saia e a face emendadas */
+.tecla.ent-a { border-bottom-right-radius: 0; }
+.tecla.ent-b { border-top-left-radius: 0; border-top-right-radius: 0; }
+.tecla.ent-b::after { content: ""; position: absolute; z-index: -2; left: 0; right: 0; bottom: 100%; height: var(--vao); background: var(--saia); box-shadow: -1px 0 0 rgba(0, 0, 0, .8), 1px 0 0 rgba(0, 0, 0, .8); }
+.tecla.ent-b::before { top: calc(-100% - var(--vao) + 3px); box-shadow: none; }
+.tecla.ent-a::before { box-shadow: none; }
+.tecla.ent-b svg { position: absolute; left: 50%; top: calc(-50% - var(--vao)); transform: translate(-50%, -50%); }
+
+/* estados: a tecla afunda e a luz ao redor dela cresce; --luz-k e a cor da luz naquele ponto do teclado */
+.tecla.um, .tecla.morta, .tecla.trava, .tecla.dedo, .tecla.baixo { z-index: -1; }     /* o brilho fica por baixo das vizinhas: so aparece nos vaos */
+.tecla.um, .tecla.morta { box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 0 3px #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 0 3px color-mix(in srgb, var(--luz-k) 45%, white); }
+.tecla.trava, .tecla.dedo { color: var(--leg); box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 0 3px #fff, 0 0 20px 8px #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 0 3px color-mix(in srgb, var(--luz-k) 25%, white), 0 0 20px 8px color-mix(in srgb, var(--luz-k) 60%, white); }
+.tecla.baixo { transform: translateY(2px); transition: none; box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 0 3px #fff, 0 0 24px 10px #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .8), 0 0 0 3px color-mix(in srgb, var(--luz-k) 15%, white), 0 0 24px 10px color-mix(in srgb, var(--luz-k) 55%, white); }
+.tecla.baixo::before { filter: brightness(.86); }
+.tecla.um .led { background: var(--luz-k); opacity: .7; }
+.tecla.trava .led, .tecla.dedo .led { background: var(--luz-k); box-shadow: 0 0 8px 2px var(--luz-k); }
+
+/* folha de sugestoes */
+#folha { position: fixed; z-index: 30; left: 0; right: 0; top: var(--barra); bottom: 0; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: rgba(4, 5, 7, .97); overflow-y: auto; touch-action: pan-y; }
+#folha[hidden] { display: none; }
+#folhaTopo { display: flex; align-items: center; gap: 12px; }
+#folhaTitulo { flex: 1; font-size: 17px; color: var(--tinta); }
+.cartao { display: block; width: 100%; text-align: left; white-space: pre-wrap; border: 1.5px solid transparent; border-radius: 12px; padding: 13px 15px; color: var(--tinta); font: 400 16px/1.45 var(--fonte); -webkit-user-select: text; user-select: text;
+  background: linear-gradient(#14151a, #14151a) padding-box, linear-gradient(var(--fresta), var(--fresta)) border-box; }
+.cartao:active { background: linear-gradient(#14151a, #14151a) padding-box, var(--feixe) border-box; }
+
+/* pareamento */
+#porta { position: fixed; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--fundo); touch-action: manipulation; }
+#porta[hidden] { display: none; }
+#portaCaixa { width: 100%; max-width: 470px; }
+#porta h1 { margin: 0 0 8px; font-size: 22px; font-weight: 500; color: var(--tinta); }
+#porta p { margin: 0 0 14px; color: var(--leg-cmd); font-size: 15px; line-height: 1.45; font-weight: 400; }
+#codigo { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--fresta); background: var(--chapa); color: var(--tinta); font: 500 19px/1.2 var(--fonte); letter-spacing: .06em; outline: none; -webkit-user-select: text; user-select: text; }
+#codigo:focus { border-color: var(--luz-m); }
+#parear, #voltar { margin-top: 12px; width: 100%; padding: 12px; font-size: 16px; }
+#voltar[hidden] { display: none; }
+#portaErro { min-height: 20px; margin-top: 10px; color: var(--alerta); font-size: 14px; }
+
+#aviso { position: fixed; z-index: 50; left: 50%; top: calc(var(--barra) + 8px); transform: translateX(-50%); max-width: 82vw; padding: 9px 15px; border-radius: 10px; border: 1px solid var(--alerta); background: #1d1012; color: #ffd9d9; font-size: 14px; font-weight: 400; opacity: 0; pointer-events: none; transition: opacity .2s; }
+#aviso.on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .tecla, #aviso { transition: none; } #kb.pensando { animation: none; } .tecla.baixo { transform: none; } }
+</style>
+</head>
+<body>
+<header id="barra">
+  <span id="luz"></span>
+  <span id="estado">conectando</span>
+  <span id="janela"></span>
+  <span id="eco"></span>
+  <span id="ping"></span>
+  <button class="chave" id="bApi" type="button" hidden></button>
+  <button class="chave" id="bAuto" type="button">IA automática</button>
+  <button class="chave" id="bTela" type="button">mini-tela</button>
+  <button class="chave" id="bCheia" type="button">tela cheia</button>
+  <button class="chave" id="bInstalar" type="button" hidden>instalar</button>
+</header>
+
+<section id="painel">
+  <div id="comp">
+    <div id="campo">
+      <div id="espelho" aria-hidden="true"></div>
+      <textarea id="ta" inputmode="none" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+        placeholder="Toque em “prompt” para escrever aqui com sugestões. Fora desse modo, as teclas vão direto para o notebook."></textarea>
+    </div>
+    <div id="faixa">
+      <div id="chips"></div>
+      <button class="acao" id="bSug" type="button">sugerir prompts</button>
+      <button class="acao" id="bMel" type="button">melhorar</button>
+      <button class="acao forte" id="bEnv" type="button">enviar</button>
+      <button class="acao" id="bEnvE" type="button">enviar + Enter</button>
+    </div>
+  </div>
+  <button id="tela" type="button"><canvas id="quadro" aria-label="Tela do notebook"></canvas><span id="telaMsg">mini-tela desligada</span><span id="telaInfo"></span></button>
+</section>
+
+<div id="caixa"><main id="kb"></main></div>
+
+<div id="folha" hidden>
+  <div id="folhaTopo"><span id="folhaTitulo"></span><button class="acao" id="bFechar" type="button">fechar</button></div>
+  <div id="cartoes"></div>
+</div>
+
+<div id="porta" hidden>
+  <div id="portaCaixa">
+    <h1>Parear com o notebook</h1>
+    <p id="portaTexto"></p>
+    <input id="codigo" type="text" inputmode="text" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="acao forte" id="parear" type="button">Parear</button>
+    <button class="acao" id="voltar" type="button" hidden>Voltar sem trocar</button>
+    <div id="portaErro"></div>
+  </div>
+</div>
+
+<div id="aviso" role="status"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const kb = $('kb'), ta = $('ta'), espelho = $('espelho');
+const lembrar = (k, padrao) => { try { const v = localStorage.getItem('teclado.' + k); return v === null ? padrao : v; } catch (e) { return padrao; } };
+const guardar = (k, v) => { try { localStorage.setItem('teclado.' + k, v); } catch (e) { /* sem armazenamento */ } };
+
+/* ---------------------------------------------------------------- */
+/* Teclado ABNT2: 6 filas de 60 colunas (1 tecla comum = 4 colunas)  */
+/* ---------------------------------------------------------------- */
+const svg = d => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const ICO = {
+  apaga: svg('<path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="M17 9.5l-5 5M12 9.5l5 5"/>'),
+  entra: svg('<path d="M19 5v7a2 2 0 0 1-2 2H6"/><path d="M10 10l-4 4 4 4"/>'),
+  shift: svg('<path d="M12 4l8 9h-4.5v6h-7v-6H4z"/>'),
+  tab: svg('<path d="M4 12h12M12 7l5 5-5 5M20 6v12"/>'),
+  esq: svg('<path d="M19 12H5M11 6l-6 6 6 6"/>'),
+  dir: svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
+  cima: svg('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+  baixo: svg('<path d="M12 5v14M6 13l6 6 6-6"/>'),
+  win: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.6l7.5-1v7H3zM11.7 4.4L21 3.1v8.5h-9.3zM3 12.8h7.5v7L3 18.7zM11.7 12.8H21v8.4l-9.3-1.3z"/></svg>'
+};
+const L = c => ({ t: 'c', c, s: c.toUpperCase(), w: 4, letra: true });
+const C = (c, s) => ({ t: 'c', c, s, w: 4 });
+const N = (k, l, w, cls) => ({ t: 'k', k, l, w, cls });
+const M = (k, l, w) => ({ t: 'm', k, l, w });
+const X = (k, l, w) => ({ t: 'x', k, l, w });
+const FILAS = [
+  [N('Escape', 'esc', 3)].concat(
+    Array.from({ length: 12 }, (_, i) => N('F' + (i + 1), 'f' + (i + 1), 3)),
+    [N('PrintScreen', 'prt', 3), N('Insert', 'ins', 3), N('Delete', 'del', 3), N('Home', 'home', 3), N('End', 'end', 3), N('PageUp', 'pg up', 3), N('PageDown', 'pg dn', 3)]),
+  [C("'", '"'), C('1', '!'), C('2', '@'), C('3', '#'), C('4', '$'), C('5', '%'), C('6', '\u00a8'), C('7', '&'), C('8', '*'), C('9', '('), C('0', ')'), C('-', '_'), C('=', '+'), N('Backspace', ICO.apaga, 8)],
+  [N('Tab', ICO.tab, 6)].concat('qwertyuiop'.split('').map(L), [C('\u00b4', '`'), C('[', '{'), N('Enter', '', 6, 'ent-a')]),
+  [X('caps', 'caps', 7)].concat('asdfghjkl\u00e7'.split('').map(L), [C('~', '^'), C(']', '}'), N('Enter', ICO.entra, 5, 'ent-b')]),
+  [M('Shift', ICO.shift, 5), C('\\', '|')].concat('zxcvbnm'.split('').map(L), [C(',', '<'), C('.', '>'), C(';', ':'), C('/', '?'), M('Shift', ICO.shift, 7)]),
+  [M('Control', 'ctrl', 5), M('Meta', ICO.win, 5), M('Alt', 'alt', 5), { t: 'c', c: ' ', s: ' ', w: 24 }, X('modo', 'prompt', 5),
+    N('ArrowLeft', ICO.esq, 4), N('ArrowDown', ICO.baixo, 4), N('ArrowUp', ICO.cima, 4), N('ArrowRight', ICO.dir, 4)]
+];
+const els = [];
+for (const fila of FILAS) {
+  console.assert(fila.reduce((a, d) => a + d.w, 0) === 60, 'fila fora de 60 colunas');
+  for (const d of fila) {
+    const el = document.createElement('div');
+    el.className = 'tecla' + (d.t === 'c' ? '' : ' cmd') + (d.cls ? ' ' + d.cls : '');
+    el.style.setProperty('--w', d.w);
+    if (d.t !== 'c') el.innerHTML = d.l + (d.t === 'k' ? '' : '<i class="led"></i>');   // rótulo fixo deste arquivo; LED nas teclas que travam
+    else if (d.letra) {
+      const p = document.createElement('span'); p.className = 'p l'; p.textContent = d.c; el.append(p);
+      if (d.c === 'f' || d.c === 'j') el.classList.add('guia');
+    } else if (d.c !== ' ') {
+      const s = document.createElement('span'); s.className = 's'; s.textContent = d.s;
+      const p = document.createElement('span'); p.className = 'p'; p.textContent = d.c;
+      el.append(s, p);
+    }
+    el._d = d; d.el = el; els.push(el); kb.append(el);
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Tema: a luz sob as teclas muda com a API de IA em uso             */
+/* ---------------------------------------------------------------- */
+const TEMAS = {
+  claude: { cores: ['#7a35f0', '#dd4a8a', '#ff8a1f'] },    // roxo -> laranja
+  gemini: { cores: ['#1b3bff', '#2f8bff', '#63e0ff'] },    // azuis: do anil ao ciano
+  padrao: { cores: ['#4b5063', '#8d93a8', '#4b5063'] }     // API ainda sem tema próprio: luz neutra
+};
+let tema = TEMAS.padrao;
+const rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+function corEm(t) {            // cor da luz na fração t (0 a 1) da largura do teclado
+  const c = tema.cores.map(rgb), n = c.length - 1;
+  const p = Math.min(n - 1e-6, Math.max(0, t * n)), i = Math.floor(p), f = p - i;
+  return 'rgb(' + c[i].map((v, j) => Math.round(v + (c[i + 1][j] - v) * f)).join(',') + ')';
+}
+function colorir() {           // cada tecla guarda a cor da luz que passa por baixo dela
+  const r = kb.getBoundingClientRect();
+  if (!r.width) return;
+  for (const el of els) { const b = el.getBoundingClientRect(); el.style.setProperty('--luz-k', corEm((b.left + b.width / 2 - r.left) / r.width)); }
+}
+function aplicarTema(id) {
+  tema = Object.prototype.hasOwnProperty.call(TEMAS, id) ? TEMAS[id] : TEMAS.padrao;
+  const raiz = document.documentElement.style;
+  raiz.setProperty('--luz-a', tema.cores[0]); raiz.setProperty('--luz-m', tema.cores[1]); raiz.setProperty('--luz-b', tema.cores[2]);
+  colorir();
+}
+addEventListener('resize', colorir);
+aplicarTema(lembrar('api', 'claude'));
+
+/* ---------------------------------------------------------------- */
+/* Ligação com o notebook: direta (JSON) ou pelo relay (AES-GCM)     */
+/* ---------------------------------------------------------------- */
+let INFO = { modo: 'direto' };
+let ws = null, pronto = false, noRelay = false, espera = 500;
+let credencial = '', chaves = null, meuC = '', sid = '', nOut = 0, nIn = 0, tOla = 0;
+let filaEnvio = Promise.resolve(), filaRec = Promise.resolve();
+let est = { inj: false, sim: false, ia: false, tela: false, msg: '' };
+const limpo = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const b64 = u8 => btoa(String.fromCharCode.apply(null, u8));
+
+async function derivar(segredo) {
+  const enc = new TextEncoder();
+  const h = async t => new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(t)));
+  const hex = Array.from(await h('teclado/sala/' + segredo), x => x.toString(16).padStart(2, '0')).join('');
+  return {
+    sala: hex.slice(0, 32),
+    t2n: await crypto.subtle.importKey('raw', await h('teclado/t2n/' + segredo), 'AES-GCM', false, ['encrypt']),
+    n2t: await crypto.subtle.importKey('raw', await h('teclado/n2t/' + segredo), 'AES-GCM', false, ['decrypt'])
+  };
+}
+async function selar(o) {
+  const nonce = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, chaves.t2n, new TextEncoder().encode(JSON.stringify(o))));
+  const saida = new Uint8Array(12 + ct.length);
+  saida.set(nonce); saida.set(ct, 12);
+  return saida;
+}
+function desmontar(u8) {      // mensagem = JSON [+ 0x00 + bytes]; os bytes são o JPEG de um quadro da tela
+  const z = u8.indexOf(0);
+  return { m: JSON.parse(new TextDecoder().decode(z < 0 ? u8 : u8.subarray(0, z))), bin: z < 0 ? null : u8.subarray(z + 1) };
+}
+async function abrir(buf) {
+  const b = new Uint8Array(buf);
+  if (b.length < 29) return null;
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b.subarray(0, 12) }, chaves.n2t, b.subarray(12));
+    return desmontar(new Uint8Array(pt));
+  } catch (e) { return null; }
+}
+
+function enviar(o) {
+  if (!ws || ws.readyState !== 1 || !pronto) { avisar('Sem ligação com o notebook: a tecla não foi enviada.'); return false; }
+  if (INFO.modo === 'relay') {
+    const copia = Object.assign({}, o, { sid, n: ++nOut }), alvo = ws;      // cópia: a mesma tecla repetida não divide o contador
+    filaEnvio = filaEnvio.then(() => selar(copia)).then(b => { if (alvo.readyState === 1) alvo.send(b); }).catch(() => {});
+  } else {
+    ws.send(JSON.stringify(o));
+  }
+  return true;
+}
+/* Sincronia das teclas: cada uma leva um número e o notebook devolve { a: 'ok', i } quando o Windows aceita.
+   O que ficar sem resposta aparece na barra; o tempo de ida e volta é medido aqui, tecla por tecla. */
+let seqT = 0, ultimoOk = 0;
+const pendentes = new Map(), tempos = [];
+function enviarTecla(o) {
+  const copia = Object.assign({}, o, { i: ++seqT });
+  if (!enviar(copia)) return false;
+  pendentes.set(copia.i, performance.now());
+  return true;
+}
+setInterval(() => {
+  const agora = performance.now(), p = $('ping');
+  let atrasadas = 0, perdidas = 0;
+  for (const [i, t0] of pendentes) { if (agora - t0 > 8000) { pendentes.delete(i); perdidas++; } else if (agora - t0 > 1200) atrasadas++; }
+  if (perdidas) avisar(perdidas > 1 ? perdidas + ' teclas não foram confirmadas pelo notebook.' : 'Uma tecla não foi confirmada pelo notebook.');
+  p.classList.toggle('atraso', atrasadas > 0);
+  if (!pronto) p.textContent = '';
+  else if (atrasadas) p.textContent = atrasadas + ' sem confirmar';
+  else if (tempos.length && Date.now() - ultimoOk < 15000) { const o = tempos.slice().sort((a, b) => a - b); p.textContent = 'tecla ' + Math.round(o[o.length >> 1]) + ' ms'; }
+  else p.textContent = rtt === null ? '' : 'ping ' + rtt + ' ms';
+}, 400);
+
+async function iniciar() {
+  try { INFO = await (await fetch('/info', { cache: 'no-store' })).json(); }
+  catch (e) { situacao(); return setTimeout(iniciar, 1500); }
+  const relay = INFO.modo === 'relay';
+  let c = '';
+  if (relay) {
+    const m = /[#&]s=([^&]+)/.exec(location.hash);
+    if (m) { c = limpo(decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname); }
+  } else {
+    const t = new URLSearchParams(location.search).get('t');
+    if (t) { c = limpo(t); history.replaceState(null, '', location.pathname); }
+  }
+  if (c) guardar(relay ? 'segredo' : 'token', c); else c = lembrar(relay ? 'segredo' : 'token', '');
+  if (!c) return pedirCodigo('');
+  usar(c);
+}
+async function usar(c) {
+  credencial = c;
+  if (INFO.modo === 'relay') {
+    if (!window.crypto || !crypto.subtle) return pedirCodigo('Este endereço não é HTTPS: o navegador bloqueia a criptografia. Abra o relay por https://.');
+    chaves = await derivar(c);
+  } else {
+    try {
+      const r = await fetch('/auth?t=' + encodeURIComponent(c), { cache: 'no-store' });
+      if (r.status === 403) return pedirCodigo('O notebook não reconheceu esse token.');
+    } catch (e) { situacao(); return setTimeout(() => usar(c), 1500); }
+  }
+  $('porta').hidden = true;
+  if (ws) { const velho = ws; ws = null; velho.onclose = null; try { velho.close(); } catch (e) { /* ja fechado */ } }
+  pronto = false; noRelay = false;
+  ligar();
+}
+function pedirCodigo(erro) {
+  const relay = INFO.modo === 'relay';
+  $('portaTexto').textContent = relay
+    ? 'Digite o segredo que o teclado.js mostra no terminal do notebook (linha “segredo”). Ele fica só neste tablet; o relay não o recebe.'
+    : 'Digite o token que o teclado.js mostra no terminal do notebook (linha “token”).';
+  $('portaErro').textContent = erro || '';
+  $('codigo').value = '';
+  $('voltar').hidden = !credencial;
+  $('porta').hidden = false;
+}
+$('parear').addEventListener('click', () => {
+  const c = limpo($('codigo').value);
+  if (!c) { $('portaErro').textContent = 'Digite o código.'; return; }
+  guardar(INFO.modo === 'relay' ? 'segredo' : 'token', c);
+  usar(c);
+});
+$('codigo').addEventListener('keydown', e => { if (e.key === 'Enter') $('parear').click(); });
+$('estado').addEventListener('click', () => { if (!pronto) pedirCodigo(''); });
+$('voltar').addEventListener('click', () => { $('porta').hidden = true; });
+
+function ligar() {
+  const base = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws?';
+  const eu = new WebSocket(base + (INFO.modo === 'relay' ? 'sala=' + chaves.sala + '&papel=tablet' : 't=' + encodeURIComponent(credencial)));
+  ws = eu; pronto = false; noRelay = false;
+  eu.binaryType = 'arraybuffer';
+  eu.onopen = () => { espera = 500; if (INFO.modo !== 'relay') estabelecer(); situacao(); };
+  eu.onmessage = ev => {
+    if (ws !== eu) return;
+    if (typeof ev.data === 'string') {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (INFO.modo === 'relay') controle(m); else receber(m);
+      return;
+    }
+    if (INFO.modo !== 'relay') { let d; try { d = desmontar(new Uint8Array(ev.data)); } catch (e) { return; } receber(d.m, d.bin); return; }
+    filaRec = filaRec.then(() => abrir(ev.data)).then(d => {
+      const m = d && d.m;
+      if (!m || ws !== eu || m.c !== meuC || !(m.n > nIn)) return;   // de outra sessão, ou repetição
+      nIn = m.n;
+      if (m.a === 'bemvindo') { if (!pronto && typeof m.sid === 'string') { sid = m.sid; estabelecer(); } return; }
+      if (pronto) receber(m, d.bin);
+    }).catch(() => {});
+  };
+  eu.onclose = () => {
+    if (ws !== eu) return;
+    ws = null; pronto = false; noRelay = false;
+    pendentes.clear();
+    soltarTudo(false); situacao();
+    setTimeout(ligar, espera); espera = Math.min(espera * 2, 4000);
+  };
+}
+function controle(m) {                                     // avisos do relay, em claro
+  if (m.r !== 'estado') return;
+  noRelay = !!m.notebook; pronto = false;
+  soltarTudo(false);
+  if (noRelay) {
+    meuC = b64(crypto.getRandomValues(new Uint8Array(16))); sid = ''; nOut = 0; nIn = 0;
+    const alvo = ws, ola = { a: 'ola', c: meuC };
+    filaEnvio = filaEnvio.then(() => selar(ola)).then(b => { if (alvo && alvo.readyState === 1) alvo.send(b); }).catch(() => {});
+    const marca = tOla = Date.now();
+    setTimeout(() => { if (tOla === marca && !pronto && noRelay) pedirCodigo('O notebook está no relay, mas não respondeu a este segredo. Confira o código.'); }, 6000);
+  }
+  situacao();
+}
+function estabelecer() {
+  pronto = true;
+  $('porta').hidden = true;
+  assinada = ''; temBase = false; pendentes.clear();
+  pedirTela();
+  situacao();
+}
+
+let rtt = null;
+setInterval(() => { if (pronto) enviar({ a: 'p', t: performance.now() }); }, 2500);
+
+function receber(m, bin) {
+  switch (m.a) {
+    case 's': {
+      est = m;
+      if (typeof m.api === 'string') { aplicarTema(m.api); guardar('api', m.api); }
+      const b = $('bApi');
+      b.hidden = !m.apiNome;
+      b.textContent = m.apiNome ? m.apiNome + (m.ia ? ' ' + String(m.modelo || '').replace(/^(claude|gemini)-/, '') : ' sem chave') : '';
+      b.classList.toggle('on', !!m.ia);
+      situacao(); pedirTela();
+      break;
+    }
+    case 'pg': rtt = Math.round(performance.now() - m.t); break;
+    case 'ok': {                                           // o notebook confirmou a tecla i
+      const t0 = pendentes.get(m.i);
+      if (t0 === undefined) break;
+      pendentes.delete(m.i);
+      tempos.push(performance.now() - t0); if (tempos.length > 15) tempos.shift();
+      ultimoOk = Date.now();
+      break;
+    }
+    case 'q': if (bin) chegouQuadro(m, bin); break;         // quadro (inteiro ou só o retângulo que mudou) da tela
+    case 'e': avisar(m.msg); break;
+    case 'corpus': modelo.uni.clear(); modelo.bi.clear(); modelo.forma.clear(); for (const t of m.itens || []) aprender(t); atualizarChips(); break;
+    case 'aprendi': aprender(m.s); break;
+    case 'tela': if (typeof m.t === 'string') $('janela').textContent = m.t; break;
+    case 'ai': chegouIA(m); break;
+  }
+}
+
+function situacao() {
+  let txt, cls = '';
+  if (!ws || ws.readyState !== 1) { txt = INFO.modo === 'relay' ? 'sem conexão com o relay, tentando de novo (toque aqui para trocar o segredo)' : 'sem conexão, tentando de novo'; cls = 'off'; }
+  else if (!pronto) {
+    if (INFO.modo === 'relay') { txt = noRelay ? 'pareando com o notebook' : 'o notebook não está no relay (toque aqui para trocar o segredo)'; cls = noRelay ? '' : 'off'; }
+    else txt = 'conectando';
+  }
+  else if (est.sim) { txt = 'simulação: o notebook não digita de verdade'; cls = 'ok'; }
+  else if (!est.inj) txt = est.msg || 'injetor iniciando';
+  else { txt = 'notebook conectado'; cls = 'ok'; }
+  $('estado').textContent = txt;
+  $('luz').className = cls;
+  if (!pronto) $('ping').textContent = '';
+  botoes();
+}
+
+let tAviso = 0;
+function avisar(msg) {
+  const a = $('aviso');
+  a.textContent = msg; a.classList.add('on');
+  clearTimeout(tAviso);
+  tAviso = setTimeout(() => a.classList.remove('on'), 3200);
+}
+let tEco = 0;
+function eco(bits, nome) {
+  const p = [];
+  if (bits & 1) p.push('Ctrl'); if (bits & 8) p.push('Win'); if (bits & 4) p.push('Alt'); if (bits & 2) p.push('Shift');
+  p.push(nome.length === 1 ? nome.toUpperCase() : nome);
+  $('eco').textContent = p.join('+');
+  clearTimeout(tEco);
+  tEco = setTimeout(() => { $('eco').textContent = ''; }, 1600);
+}
+
+/* ---------------------------------------------------------------- */
+/* Modificadores: 1 toque = próxima tecla; 2 toques = trava;         */
+/* dedo segurando + outra tecla = segurado de verdade no notebook    */
+/* ---------------------------------------------------------------- */
+let modo = 'direto', caps = false, morta = null, mortaEl = null, fluxo = '';
+const MOD = { Control: { bit: 1 }, Shift: { bit: 2 }, Alt: { bit: 4 }, Meta: { bit: 8 } };
+for (const k in MOD) Object.assign(MOD[k], { st: 0, dedos: 0, so: false, usado: false });
+
+function soPress(k) { const m = MOD[k]; if (!m.so && enviar({ a: 'd', k })) m.so = true; }
+function soSolta(k) { const m = MOD[k]; if (m.so) { m.so = false; if (pronto) enviar({ a: 'r', k }); } }
+function soltarTudo(avisarNotebook) {
+  for (const h of dedos.values()) { clearTimeout(h.t1); clearInterval(h.t2); marcar(h.el._d, false); }
+  dedos.clear();
+  for (const k in MOD) { const m = MOD[k]; if (m.so && avisarNotebook && pronto) enviar({ a: 'r', k }); m.so = false; m.st = 0; m.dedos = 0; m.usado = false; }
+  pintar();
+}
+function modBaixa(k) { const m = MOD[k]; m.dedos++; if (m.dedos === 1) m.usado = false; }
+function modSobe(k) {
+  const m = MOD[k];
+  if (m.dedos > 0) m.dedos--;
+  if (m.dedos > 0) return;
+  if (m.usado) { if (m.st === 1) m.st = 0; if (m.st !== 2) soSolta(k); }
+  else if (m.st === 0) m.st = 1;
+  else if (m.st === 1) {
+    if (k === 'Meta') { m.st = 0; enviarTecla({ a: 'k', k: 'Meta', m: 0 }); }     // Win sozinho: menu Iniciar
+    else { m.st = 2; soPress(k); }
+  } else { m.st = 0; soSolta(k); }
+  m.usado = false;
+}
+function ativos() { let b = 0; for (const k in MOD) { const m = MOD[k]; if (m.dedos > 0 || m.st > 0 || m.so) b |= m.bit; } return b; }
+function armar(local) {       // consome os modificadores para uma tecla; devolve a máscara dos de um toque
+  let masc = 0;
+  for (const k in MOD) {
+    const m = MOD[k];
+    if (m.dedos > 0) { m.usado = true; if (!local) soPress(k); }
+    if (m.st === 1) { if (!m.so) masc |= m.bit; m.st = 0; }
+  }
+  return masc;
+}
+
+/* teclas mortas do ABNT2 */
+const MORTAS = { '\u00b4': '\u0301', '`': '\u0300', '~': '\u0303', '^': '\u0302', '\u00a8': '\u0308' };
+const BASES = { '\u0301': 'aeiouy', '\u0300': 'aeiou', '\u0302': 'aeiou', '\u0303': 'aon', '\u0308': 'aeiouy' };
+function compor(ch, el) {     // texto a emitir, ou null se o acento ficou esperando a letra
+  if (morta === null) {
+    if (MORTAS[ch]) { morta = ch; mortaEl = el; return null; }
+    return ch;
+  }
+  const m = morta; morta = null; mortaEl = null;
+  if (ch === ' ') return m;
+  if (MORTAS[ch]) return m + ch;
+  if (BASES[MORTAS[m]].includes(ch.toLowerCase())) return (ch + MORTAS[m]).normalize('NFC');
+  return m + ch;
+}
+function soltarMorta() { const m = morta; morta = null; mortaEl = null; return m || ''; }
+
+/* ---------------------------------------------------------------- */
+/* Do toque à ação                                                   */
+/* ---------------------------------------------------------------- */
+const LOCAIS = new Set(['Enter', 'Backspace', 'Delete', 'Tab', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
+const REPETE = new Set(['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown']);
+
+function emitir(txt) {
+  if (modo === 'prompt') return inserir(txt);
+  if (enviarTecla({ a: 'u', s: txt })) { fluxo = (fluxo + txt).slice(-200); atualizarChips(); }
+}
+function acaoDe(d) {          // devolve a função que executa (e repete) a tecla, ou null
+  const at = ativos(), cmd = (at & 13) !== 0, shift = (at & 2) !== 0;
+  if (d.t === 'c') {
+    if (cmd) {                                              // atalho: sempre para o notebook
+      const pend = soltarMorta(); if (pend) emitir(pend);
+      const msg = { a: 'c', c: d.c, m: armar(false) };
+      fluxo = ''; atualizarChips();
+      eco(at, d.c === ' ' ? 'espaço' : d.c);
+      return () => enviarTecla(msg);
+    }
+    armar(true);
+    const txt = compor((d.letra ? shift !== caps : shift) ? d.s : d.c, d.el);
+    return txt === null ? null : () => emitir(txt);
+  }
+  if (d.k === 'Backspace' && morta !== null && !cmd) { soltarMorta(); armar(true); return null; }   // cancela o acento
+  const pend = soltarMorta(); if (pend) emitir(pend);
+  if (!cmd && modo === 'prompt' && LOCAIS.has(d.k)) { armar(true); return () => editar(d.k, shift); }
+  const msg = { a: 'k', k: d.k, m: armar(false) };
+  if (at) eco(at, d.k);
+  return () => {
+    if (!enviarTecla(msg) || modo !== 'direto') return;
+    fluxo = d.k === 'Backspace' && !at ? fluxo.slice(0, -1) : '';
+    atualizarChips();
+  };
+}
+
+const dedos = new Map();      // pointerId -> { el, mod, t1, t2 }
+function marcar(d, on) { for (const el of els) if (el === d.el || (d.k === 'Enter' && el._d.k === 'Enter')) el.classList.toggle('baixo', on); }
+function soltar(id) {
+  const h = dedos.get(id);
+  if (!h) return;
+  dedos.delete(id);
+  clearTimeout(h.t1); clearInterval(h.t2);
+  marcar(h.el._d, false);
+  if (h.mod) { modSobe(h.mod); pintar(); }
+}
+kb.addEventListener('pointerdown', e => {
+  const el = e.target.closest('.tecla');
+  if (!el) return;
+  e.preventDefault();
+  if (dedos.has(e.pointerId)) soltar(e.pointerId);
+  acordar();
+  if (modo === 'prompt' && document.activeElement !== ta) ta.focus({ preventScroll: true });
+  const d = el._d, h = { el };
+  dedos.set(e.pointerId, h);
+  marcar(d, true);
+  if (d.t === 'm') { h.mod = d.k; modBaixa(d.k); pintar(); return; }
+  if (d.t === 'x') { if (d.k === 'caps') { caps = !caps; pintar(); } else trocarModo(modo === 'prompt' ? 'direto' : 'prompt'); return; }
+  const f = acaoDe(d);
+  pintar();
+  if (!f) return;
+  f();
+  if (d.t === 'c' || REPETE.has(d.k)) h.t1 = setTimeout(() => { h.t2 = setInterval(f, 34); }, 420);
+});
+addEventListener('pointerup', e => soltar(e.pointerId));
+addEventListener('pointercancel', e => soltar(e.pointerId));
+addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { soltarTudo(true); pararTela(); }     // tablet apagado: solta tudo e para os quadros
+  else { acordar(); pedirTela(); }
+});
+
+function pintar() {
+  const at = ativos(), shift = (at & 2) !== 0;
+  kb.classList.toggle('shift', shift);
+  kb.classList.toggle('maius', shift !== caps);
+  for (const el of els) {
+    const d = el._d;
+    if (d.t === 'm') { const m = MOD[d.k]; el.classList.toggle('um', m.st === 1); el.classList.toggle('trava', m.st === 2); el.classList.toggle('dedo', m.dedos > 0); }
+    else if (d.t === 'x') el.classList.toggle('trava', d.k === 'caps' ? caps : modo === 'prompt');
+    else if (d.t === 'c') el.classList.toggle('morta', el === mortaEl);
+  }
+  document.body.classList.toggle('prompt', modo === 'prompt');
+}
+
+function trocarModo(m) {
+  if (modo === m) return;
+  modo = m; fluxo = '';
+  const pend = soltarMorta();
+  if (m === 'prompt') { ta.focus({ preventScroll: true }); if (pend) inserir(pend); }
+  else ta.blur();
+  ta.placeholder = m === 'prompt' ? DICA_PROMPT : DICA_DIRETO;
+  pintar(); pintarFantasma(); atualizarChips(); agendarIA(); botoes();
+}
+const DICA_DIRETO = ta.placeholder;
+const DICA_PROMPT = 'Escreva o prompt. Enter envia ao notebook, Shift+Enter quebra a linha, Tab aceita a sugestão, Esc volta ao modo direto.';
+ta.addEventListener('focus', () => trocarModo('prompt'));
+ta.addEventListener('input', mudou);                       // se o teclado do Android for usado no campo
+ta.addEventListener('scroll', () => { espelho.scrollTop = ta.scrollTop; });
+document.addEventListener('selectionchange', () => { if (document.activeElement === ta) { pintarFantasma(); atualizarChips(); } });
+
+/* ---------------------------------------------------------------- */
+/* Rascunho                                                          */
+/* ---------------------------------------------------------------- */
+const alto = c => c >= 0xd800 && c <= 0xdbff, baixoS = c => c >= 0xdc00 && c <= 0xdfff;
+const noFim = () => ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length;
+function inserir(s) { ta.setRangeText(s, ta.selectionStart, ta.selectionEnd, 'end'); mudou(); }
+function apagar(frente) {
+  const v = ta.value;
+  let a = ta.selectionStart, b = ta.selectionEnd;
+  if (a === b) {
+    if (frente) { if (b >= v.length) return; b += alto(v.charCodeAt(b)) && baixoS(v.charCodeAt(b + 1)) ? 2 : 1; }
+    else { if (a === 0) return; a -= a >= 2 && baixoS(v.charCodeAt(a - 1)) && alto(v.charCodeAt(a - 2)) ? 2 : 1; }
+  }
+  ta.setRangeText('', a, b, 'end');
+  mudou();
+}
+function cursor(p) { p = Math.max(0, Math.min(ta.value.length, p)); ta.setSelectionRange(p, p); pintarFantasma(); atualizarChips(); }
+function linha(p) { const v = ta.value; const ini = v.lastIndexOf('\n', p - 1) + 1; let fim = v.indexOf('\n', p); if (fim < 0) fim = v.length; return { ini, fim }; }
+function editar(k, shift) {
+  const a = ta.selectionStart, b = ta.selectionEnd;
+  switch (k) {
+    case 'Enter': if (shift) inserir('\n'); else mandar(false); break;
+    case 'Backspace': apagar(false); break;
+    case 'Delete': apagar(true); break;
+    case 'Tab': if (fantasmaVale()) inserir(fantasma); else if (chipsAtuais.length) usarChip(chipsAtuais[0]); break;
+    case 'Escape': if (fantasma) { fantasma = ''; pintarFantasma(); } else trocarModo('direto'); break;
+    case 'ArrowLeft': cursor(a !== b ? a : a - 1); break;
+    case 'ArrowRight': cursor(a !== b ? b : b + 1); break;
+    case 'Home': cursor(linha(a).ini); break;
+    case 'End': cursor(linha(b).fim); break;
+    case 'ArrowUp': { const l = linha(a); if (l.ini === 0) cursor(0); else { const ant = linha(l.ini - 1); cursor(Math.min(ant.ini + (a - l.ini), ant.fim)); } break; }
+    case 'ArrowDown': { const l = linha(b); if (l.fim >= ta.value.length) cursor(ta.value.length); else { const seg = linha(l.fim + 1); cursor(Math.min(seg.ini + (b - l.ini), seg.fim)); } break; }
+  }
+}
+function mandar(comEnter) {
+  const s = ta.value;
+  if (!s.trim()) return;
+  if (!enviarTecla({ a: 'txt', s, enter: !!comEnter })) return;
+  aprender(s.trim());                                      // só o que sai do rascunho vira aprendizado
+  ta.value = ''; fantasma = '';
+  mudou();
+}
+
+/* fantasma: a continuação sugerida pela IA, aceita com Tab */
+let fantasma = '', fantasmaDe = '';
+const fantasmaVale = () => !!fantasma && modo === 'prompt' && fantasmaDe === ta.value && noFim();
+function pintarFantasma() {
+  espelho.textContent = '';
+  if (!fantasmaVale()) return;
+  const a = document.createElement('span'); a.textContent = ta.value; a.style.visibility = 'hidden';
+  const b = document.createElement('span'); b.className = 'fant'; b.textContent = fantasma;
+  espelho.append(a, b);
+  espelho.scrollTop = ta.scrollTop;
+}
+function mudou() {
+  const v = ta.value;
+  if (fantasma) {
+    const cheio = fantasmaDe + fantasma;                   // continuar digitando o que foi sugerido mantém o resto
+    if (v.length > fantasmaDe.length && v.length < cheio.length && cheio.startsWith(v)) { fantasma = cheio.slice(v.length); fantasmaDe = v; }
+    else if (v !== fantasmaDe) fantasma = '';
+  }
+  pintarFantasma(); atualizarChips(); agendarIA(); botoes();
+}
+
+/* ---------------------------------------------------------------- */
+/* Aprendizado local: bigramas dos prompts enviados pelo rascunho    */
+/* ---------------------------------------------------------------- */
+const modelo = { uni: new Map(), bi: new Map(), forma: new Map() };
+const PALAVRA = /[\p{L}\p{N}_]+(?:['-][\p{L}\p{N}_]+)*/gu;
+function aprender(texto) {
+  let ant = null, fim = 0;
+  for (const m of String(texto).matchAll(PALAVRA)) {
+    const entre = texto.slice(fim, m.index);
+    const inicio = fim === 0 || /[.!?\n]/.test(entre);
+    let w = m[0];
+    if (inicio) { ant = null; if (w.length > 1 && w[0] !== w[0].toLowerCase() && w.slice(1) === w.slice(1).toLowerCase()) w = w.toLowerCase(); }
+    const k = w.toLowerCase();
+    modelo.uni.set(k, (modelo.uni.get(k) || 0) + 1);
+    let f = modelo.forma.get(k); if (!f) modelo.forma.set(k, f = new Map());
+    f.set(w, (f.get(w) || 0) + 1);
+    if (ant) { let b = modelo.bi.get(ant); if (!b) modelo.bi.set(ant, b = new Map()); b.set(k, (b.get(k) || 0) + 1); }
+    ant = k; fim = m.index + m[0].length;
+  }
+}
+function forma(k, parcial) {
+  let melhor = k, n = 0;
+  for (const [w, c] of modelo.forma.get(k) || []) if (c > n) { melhor = w; n = c; }
+  if (parcial && parcial[0] !== parcial[0].toLowerCase() && melhor === melhor.toLowerCase()) melhor = melhor[0].toUpperCase() + melhor.slice(1);
+  return melhor;
+}
+function prever(ant, parcial) {
+  const p = parcial.toLowerCase(), cand = new Map();
+  const b = ant ? modelo.bi.get(ant.toLowerCase()) : null;
+  if (b) for (const [k, n] of b) if (!p || (k.startsWith(p) && k !== p)) cand.set(k, n * 8);
+  if (p.length >= 2) for (const [k, n] of modelo.uni) if (k.startsWith(p) && k !== p) cand.set(k, (cand.get(k) || 0) + n);
+  return Array.from(cand).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => forma(x[0], parcial));
+}
+function contexto() {
+  const t = modo === 'prompt' ? ta.value.slice(0, ta.selectionStart) : fluxo;
+  const parcial = /[\p{L}\p{N}_'-]*$/u.exec(t)[0];
+  const antes = t.slice(0, t.length - parcial.length);
+  const m = /([\p{L}\p{N}_'-]+)[ \t,;:]*$/u.exec(antes);
+  return { parcial, ant: m ? m[1] : '' };
+}
+let chipsAtuais = [];
+function atualizarChips() {
+  const c = contexto();
+  chipsAtuais = prever(c.ant, c.parcial);
+  const cx = $('chips');
+  cx.textContent = '';
+  for (const w of chipsAtuais) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.textContent = w;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); usarChip(w); });
+    cx.append(b);
+  }
+}
+function usarChip(w) {
+  const n = contexto().parcial.length;
+  if (modo === 'prompt') { ta.setRangeText(w + ' ', ta.selectionStart - n, ta.selectionEnd, 'end'); mudou(); return; }
+  for (let i = 0; i < n; i++) enviarTecla({ a: 'k', k: 'Backspace', m: 0 });
+  if (enviarTecla({ a: 'u', s: w + ' ' })) fluxo = (fluxo.slice(0, fluxo.length - n) + w + ' ').slice(-200);
+  atualizarChips();
+}
+
+/* ---------------------------------------------------------------- */
+/* IA: completar (automático), sugerir e melhorar (sob pedido)       */
+/* ---------------------------------------------------------------- */
+let iaAuto = lembrar('auto', '1') === '1', iaSeq = 0, tIA = 0, erroIA = '';
+const pend = {};
+function pedirIA(kind) {
+  const id = ++iaSeq;
+  pend[kind] = { id, de: ta.value };
+  if (!enviar({ a: 'ai', id, kind, draft: ta.value })) delete pend[kind];
+  botoes();
+}
+function agendarIA() {
+  clearTimeout(tIA);
+  if (!iaAuto || !est.ia || !pronto || modo !== 'prompt' || fantasmaVale() || !noFim() || ta.value.trim().length < 12) return;
+  tIA = setTimeout(() => pedirIA('completar'), 750);
+}
+function chegouIA(m) {
+  const p = pend[m.kind];
+  if (!p || p.id !== m.id) return;                          // resposta de um pedido antigo
+  delete pend[m.kind];
+  botoes();
+  if (m.erro) { if (m.kind !== 'completar' || m.erro !== erroIA) avisar(m.erro); erroIA = m.erro; return; }
+  erroIA = '';
+  if (m.kind === 'completar') {
+    const t = /\s$/.test(p.de) ? String(m.text || '').replace(/^\s+/, '') : String(m.text || '');   // sem espaço dobrado na emenda
+    if (ta.value !== p.de || !t) return;
+    fantasma = t; fantasmaDe = p.de;
+    pintarFantasma();
+    return;
+  }
+  abrirFolha(m.kind === 'sugerir' ? 'Sugestões para agora' : 'Rascunho melhorado', m.itens || []);
+}
+function abrirFolha(titulo, itens) {
+  $('folhaTitulo').textContent = titulo + '. Toque em uma para levar ao rascunho.';
+  const cx = $('cartoes');
+  cx.textContent = '';
+  cx.style.display = 'grid'; cx.style.gap = '10px';
+  for (const t of itens) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'cartao'; b.textContent = t;
+    b.addEventListener('click', () => {
+      $('folha').hidden = true;
+      ta.value = t; ta.setSelectionRange(t.length, t.length);
+      fantasma = '';
+      trocarModo('prompt'); mudou();
+    });
+    cx.append(b);
+  }
+  $('folha').hidden = false;
+}
+$('bFechar').addEventListener('click', () => { $('folha').hidden = true; });
+
+function botoes() {
+  const vazio = !ta.value.trim();
+  $('bEnv').disabled = $('bEnvE').disabled = vazio || !pronto;
+  $('bMel').disabled = vazio || !pronto || !!pend.melhorar;
+  $('bSug').disabled = !pronto || !!pend.sugerir;
+  $('bSug').textContent = pend.sugerir ? 'pensando' : 'sugerir prompts';
+  $('bMel').textContent = pend.melhorar ? 'pensando' : 'melhorar';
+  $('bSug').classList.toggle('espera', !!pend.sugerir);
+  $('bMel').classList.toggle('espera', !!pend.melhorar);
+  kb.classList.toggle('pensando', !!(pend.sugerir || pend.melhorar));
+  $('bAuto').classList.toggle('on', iaAuto && est.ia);
+  $('bTela').classList.toggle('on', telaOn && est.tela);
+  $('telaMsg').textContent = !est.tela && pronto ? 'o notebook não tem captura de tela' : telaOn ? 'aguardando a tela do notebook' : 'mini-tela desligada';
+}
+const semFoco = (id, f) => $(id).addEventListener('pointerdown', e => { e.preventDefault(); if (!$(id).disabled) f(); });
+semFoco('bEnv', () => mandar(false));
+semFoco('bEnvE', () => mandar(true));
+semFoco('bSug', () => pedirIA('sugerir'));
+semFoco('bMel', () => pedirIA('melhorar'));
+semFoco('bApi', () => {                                    // alterna entre as APIs que têm chave no notebook; as cores acompanham
+  const lista = est.apis || [], i = lista.findIndex(a => a.id === est.api);
+  for (let k = 1; k < lista.length; k++) { const c = lista[(i + k) % lista.length]; if (c.ok) return enviar({ a: 'api', id: c.id }); }
+  const outra = lista.find(a => a.id !== est.api);
+  avisar(outra ? 'Para usar o ' + outra.nome + ', guarde a chave no notebook: node teclado.js --chave ' + outra.id + '=SUA_CHAVE' : 'Só há uma API de IA configurada.');
+});
+semFoco('bAuto', () => {
+  if (!est.ia) return avisar('IA desligada: falta a chave da API no notebook (veja o terminal do teclado.js).');
+  iaAuto = !iaAuto; guardar('auto', iaAuto ? '1' : '0');
+  if (!iaAuto) { fantasma = ''; pintarFantasma(); }
+  botoes(); agendarIA();
+});
+
+/* ---------------------------------------------------------------- */
+/* Tela do notebook ao vivo                                          */
+/* O notebook manda um quadro inteiro e depois só os retângulos que  */
+/* mudaram. Cada quadro tem número: se faltar um, peço outro inteiro. */
+/* Só confirmo depois de desenhar, e ele só manda o próximo depois   */
+/* da confirmação: em link lento caem os quadros, não cresce o atraso.*/
+/* ---------------------------------------------------------------- */
+let telaOn = lembrar('tela', '1') === '1', telaGrande = false, razao = '', assinada = '', temBase = false, nTela = 0, filaTela = Promise.resolve();
+const lona = $('quadro'), pincel = lona.getContext('2d'), instantes = [];
+function pedirTela() {
+  botoes();
+  if (!pronto) return;
+  const o = { a: 'tela', on: !!(telaOn && est.tela && !document.hidden), w: telaGrande ? 1280 : 640, fps: telaGrande ? 12 : 6 };
+  const marca = JSON.stringify(o);
+  if (marca === assinada) return;                          // nada mudou: não reinicia o fluxo
+  assinada = marca; temBase = false;
+  enviar(o);
+}
+function pararTela() { assinada = ''; temBase = false; if (pronto) enviar({ a: 'tela', on: false }); }
+function chegouQuadro(m, bin) {
+  filaTela = filaTela.then(async () => {
+    if (!m.kf && (!temBase || m.n !== nTela + 1)) {        // fora de sequência: confirmo para não travar e peço um quadro inteiro
+      enviar({ a: 'tv', n: m.n });
+      if (temBase) { temBase = false; enviar({ a: 'tela', chave: true }); }
+      return;
+    }
+    const figura = await createImageBitmap(new Blob([bin], { type: 'image/jpeg' }));
+    if (m.kf) {
+      if (lona.width !== m.W || lona.height !== m.H) { lona.width = m.W; lona.height = m.H; }
+      razao = m.W + ' / ' + m.H;
+      $('tela').style.aspectRatio = telaGrande ? '' : razao;
+      temBase = true;
+    }
+    pincel.drawImage(figura, m.x, m.y);
+    figura.close();
+    nTela = m.n;
+    $('tela').classList.add('tem');
+    if (typeof m.t === 'string') $('janela').textContent = m.t;
+    enviar({ a: 'tv', n: m.n });
+    instantes.push(performance.now());
+  }).catch(() => { if (temBase) { temBase = false; enviar({ a: 'tela', chave: true }); } });
+}
+setInterval(() => {                                        // quadros por segundo de verdade, medidos aqui
+  const agora = performance.now();
+  while (instantes.length && agora - instantes[0] > 2000) instantes.shift();
+  $('telaInfo').textContent = telaOn && temBase && pronto ? (instantes.length / 2).toFixed(instantes.length < 6 ? 1 : 0) + ' quadros/s' : '';
+}, 500);
+semFoco('bTela', () => {
+  telaOn = !telaOn; guardar('tela', telaOn ? '1' : '0');
+  if (!telaOn) { $('tela').classList.remove('tem', 'grande'); telaGrande = false; $('tela').style.aspectRatio = razao; pararTela(); }
+  pedirTela();
+});
+$('tela').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (!telaOn) { telaOn = true; guardar('tela', '1'); return pedirTela(); }
+  if (!$('tela').classList.contains('tem')) return;
+  telaGrande = !telaGrande;
+  $('tela').classList.toggle('grande', telaGrande);
+  $('tela').style.aspectRatio = telaGrande ? '' : razao;
+  pedirTela();
+});
+
+/* ---------------------------------------------------------------- */
+/* Tela cheia e tela sempre acesa (esta última só em HTTPS/localhost) */
+/* ---------------------------------------------------------------- */
+semFoco('bCheia', () => {
+  try {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {}); })
+      .catch(() => avisar('Este navegador não deixou entrar em tela cheia.'));
+  } catch (e) { avisar('Este navegador não deixou entrar em tela cheia.'); }
+});
+/* instalado como app (só em HTTPS ou localhost) ele já abre em tela cheia e deitado */
+const comoApp = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+if (comoApp) $('bCheia').hidden = true;
+let convite = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); convite = e; $('bInstalar').hidden = false; });
+addEventListener('appinstalled', () => { convite = null; $('bInstalar').hidden = true; });
+semFoco('bInstalar', () => { if (convite) { convite.prompt(); convite = null; $('bInstalar').hidden = true; } });
+if (window.isSecureContext && 'serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+document.addEventListener('fullscreenchange', () => $('bCheia').classList.toggle('on', !!document.fullscreenElement));
+let trava = null;
+function acordar() {
+  if (trava || !navigator.wakeLock || document.hidden) return;
+  navigator.wakeLock.request('screen').then(t => { trava = t; t.addEventListener('release', () => { trava = null; }); }).catch(() => {});
+}
+
+pintar(); botoes(); situacao();
+iniciar();
+})();
+</script>
+</body>
+</html>

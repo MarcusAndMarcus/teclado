@@ -1,0 +1,10 @@
+# Blueprint do Render: New > Blueprint > escolha este repositorio > Apply.
+# Cria o relay do teclado. Nao ha variavel para preencher: a sala e a do primeiro notebook que conectar.
+services:
+  - type: web
+    name: teclado
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm install
+    startCommand: npm start
